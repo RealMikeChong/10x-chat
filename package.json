@@ -22,14 +22,14 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx src/bin/cli.ts",
-    "start": "pnpm run build && node dist/bin/cli.js",
+    "dev": "bun run src/bin/cli.ts",
+    "start": "bun run build && node dist/bin/cli.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "prepublishOnly": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
+    "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "engines": {
     "node": ">=22"
@@ -46,11 +46,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/realmikechong/10x-chat.git"
+    "url": "https://github.com/RealMikeChong/10x-chat.git"
   },
-  "homepage": "https://github.com/realmikechong/10x-chat#readme",
+  "homepage": "https://github.com/RealMikeChong/10x-chat#readme",
   "bugs": {
-    "url": "https://github.com/realmikechong/10x-chat/issues"
+    "url": "https://github.com/RealMikeChong/10x-chat/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -69,6 +69,5 @@
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }

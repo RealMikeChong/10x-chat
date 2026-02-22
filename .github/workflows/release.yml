@@ -15,31 +15,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm run typecheck
+        run: bun run typecheck
 
       - name: Lint
-        run: pnpm run lint
+        run: bun run lint
 
       - name: Test
-        run: pnpm run test
+        run: bun run test
 
       - name: Build
-        run: pnpm run build
+        run: bun run build
 
       - name: Publish to npm
-        run: pnpm publish --no-git-checks --provenance
+        run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
