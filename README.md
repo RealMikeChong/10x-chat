@@ -148,6 +148,7 @@ This lets agents like Codex or Claude Code use 10x-chat to query other models fo
 | ChatGPT | ✅ | chatgpt.com |
 | Gemini | ✅ | gemini.google.com |
 | Claude | ✅ | claude.ai |
+| Grok | ✅ | grok.com |
 
 ## Development
 

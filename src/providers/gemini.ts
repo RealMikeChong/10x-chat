@@ -12,15 +12,17 @@ export const GEMINI_CONFIG: ProviderConfig = {
 };
 
 const SELECTORS = {
-  composer: '.ql-editor[contenteditable="true"], [aria-label="Enter a prompt here"]',
-  sendButton: 'button[aria-label="Send message"], .send-button',
-  responseTurn: '.response-container .model-response-text, .response-content',
+  composer: '.ql-editor[contenteditable="true"], div[role="textbox"][aria-label*="prompt"]',
+  sendButton: 'button.send-button, button[aria-label="Send message"]',
+  /** model-response is the Angular custom element wrapping each AI turn */
+  responseTurn: 'model-response .model-response-text, model-response message-content',
 } as const;
 
 export const geminiActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await page.waitForTimeout(2000);
+      // Wait for composer to appear (indicates logged in and loaded)
+      await page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }).catch(() => {});
       const composer = await page.$(SELECTORS.composer);
       return !!composer;
     } catch {

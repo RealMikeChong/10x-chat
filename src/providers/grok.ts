@@ -1,30 +1,30 @@
 import type { Page } from 'playwright';
 import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
 
-export const CHATGPT_CONFIG: ProviderConfig = {
-  name: 'chatgpt',
-  displayName: 'ChatGPT',
-  url: 'https://chatgpt.com',
-  loginUrl: 'https://chatgpt.com/auth/login',
-  models: ['GPT-4o', 'GPT-4o mini', 'GPT-4.5', 'o1', 'o3-mini'],
-  defaultModel: 'GPT-4o',
+export const GROK_CONFIG: ProviderConfig = {
+  name: 'grok',
+  displayName: 'Grok',
+  url: 'https://grok.com',
+  loginUrl: 'https://grok.com',
+  models: ['grok-3', 'grok-3-mini', 'grok-2'],
+  defaultModel: 'grok-3',
   defaultTimeoutMs: 5 * 60 * 1000,
 };
 
 const SELECTORS = {
-  composer:
-    '#prompt-textarea, [data-testid="composer-input"], div.ProseMirror[contenteditable="true"]',
-  sendButton:
-    '#composer-submit-button, button[aria-label="Send prompt"], [data-testid="send-button"]',
-  stopButton: 'button[aria-label="Stop streaming"]',
-  assistantTurn: '[data-message-author-role="assistant"]',
-  loginPage: 'button:has-text("Log in"), button:has-text("Sign up")',
+  /** ProseMirror contenteditable composer */
+  composer: '.tiptap.ProseMirror[contenteditable="true"]',
+  sendButton: 'button[aria-label="Submit"]',
+  /** Assistant messages are inside .items-start containers with .message-bubble */
+  assistantTurn: '.items-start .message-bubble',
+  /** Login page indicators */
+  loginPage: 'a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in")',
+  modelSelector: '#model-select-trigger',
 } as const;
 
-export const chatgptActions: ProviderActions = {
+export const grokActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      // Wait for either composer or login indicators to appear
       await Promise.race([
         page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }),
         page.waitForSelector(SELECTORS.loginPage, { timeout: 8_000 }),
@@ -33,8 +33,8 @@ export const chatgptActions: ProviderActions = {
       const composer = await page.$(SELECTORS.composer);
       if (composer) return true;
 
-      const loginButton = await page.$(SELECTORS.loginPage);
-      if (loginButton) return false;
+      const loginIndicator = await page.$(SELECTORS.loginPage);
+      if (loginIndicator) return false;
 
       return false;
     } catch {
@@ -46,7 +46,7 @@ export const chatgptActions: ProviderActions = {
     const composer = await page.waitForSelector(SELECTORS.composer, { timeout: 15_000 });
     if (!composer) {
       throw new Error(
-        'ChatGPT composer not found. The UI may have changed. Try running with --headed to debug.',
+        'Grok composer not found. The UI may have changed. Try running with --headed to debug.',
       );
     }
 
@@ -58,7 +58,7 @@ export const chatgptActions: ProviderActions = {
     try {
       await composer.fill(prompt);
     } catch {
-      // contenteditable elements sometimes reject fill() — inject via JS
+      // contenteditable ProseMirror elements reject fill() — inject via JS
       await page.evaluate(
         ({ sel, text }) => {
           const el = document.querySelector(sel);
@@ -73,9 +73,12 @@ export const chatgptActions: ProviderActions = {
 
     await page.waitForTimeout(300);
 
-    const sendButton = await page.waitForSelector(SELECTORS.sendButton, { timeout: 5_000 });
+    // Wait for submit button to become enabled
+    const sendButton = await page.waitForSelector(`${SELECTORS.sendButton}:not([disabled])`, {
+      timeout: 5_000,
+    });
     if (!sendButton) {
-      throw new Error('ChatGPT send button not found. The UI may have changed.');
+      throw new Error('Grok send button not found or still disabled. The UI may have changed.');
     }
     await sendButton.click();
   },
@@ -90,7 +93,7 @@ export const chatgptActions: ProviderActions = {
     // Count existing assistant turns before our submission
     const existingTurns = await page.locator(SELECTORS.assistantTurn).count();
 
-    // Wait for a new assistant turn to appear using Playwright's locator API
+    // Wait for a new assistant turn to appear
     await page.locator(SELECTORS.assistantTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
 
     // Poll until the response stops changing (streaming complete)

@@ -7,7 +7,7 @@ import type { ProviderName } from '../types.js';
 export function createLoginCommand(): Command {
   const cmd = new Command('login')
     .description('Login to an AI provider (opens browser for authentication)')
-    .argument('[provider]', 'Provider to login to (chatgpt, gemini, claude)')
+    .argument('[provider]', 'Provider to login to (chatgpt, gemini, claude, grok)')
     .option('--all', 'Login to all providers')
     .option('--status', 'Check login status for all providers')
     .action(async (providerArg?: string, options?: { all?: boolean; status?: boolean }) => {

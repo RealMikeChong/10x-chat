@@ -20,7 +20,7 @@ const SELECTORS = {
 export const claudeActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await page.waitForTimeout(2000);
+      await page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }).catch(() => {});
       const composer = await page.$(SELECTORS.composer);
       return !!composer;
     } catch {

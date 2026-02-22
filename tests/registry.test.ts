@@ -7,7 +7,8 @@ describe('Provider Registry', () => {
     expect(providers).toContain('chatgpt');
     expect(providers).toContain('gemini');
     expect(providers).toContain('claude');
-    expect(providers).toHaveLength(3);
+    expect(providers).toContain('grok');
+    expect(providers).toHaveLength(4);
   });
 
   it('should get a provider by name', () => {
@@ -26,7 +27,11 @@ describe('Provider Registry', () => {
     expect(isValidProvider('chatgpt')).toBe(true);
     expect(isValidProvider('gemini')).toBe(true);
     expect(isValidProvider('claude')).toBe(true);
+    expect(isValidProvider('grok')).toBe(true);
     expect(isValidProvider('unknown')).toBe(false);
     expect(isValidProvider('')).toBe(false);
+    // Prototype pollution guard
+    expect(isValidProvider('toString')).toBe(false);
+    expect(isValidProvider('__proto__')).toBe(false);
   });
 });

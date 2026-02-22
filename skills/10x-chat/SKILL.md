@@ -23,6 +23,7 @@ use `bunx` (bun.sh) instead `npx` if you prefer speed.
 npx 10x-chat login chatgpt
 npx 10x-chat login gemini
 npx 10x-chat login claude
+npx 10x-chat login grok
 
 # Chat with a single provider
 npx 10x-chat chat -p "Review this code for bugs" --provider chatgpt --file "src/**/*.ts"
