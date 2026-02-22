@@ -3,3 +3,4 @@ dist/
 *.tgz
 .DS_Store
 temp-research/
+scripts/inspect-*.ts
