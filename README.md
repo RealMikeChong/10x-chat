@@ -1,6 +1,6 @@
 # 10x-chat
 
-> Chat with web AI agents (ChatGPT, Gemini, Claude, Grok) from your terminal via browser automation.
+> Chat with web AI agents (ChatGPT, Gemini, Claude, Grok, NotebookLM) from your terminal via browser automation.
 
 10x-chat uses [Playwright](https://playwright.dev) to automate browser sessions with persisted login profiles. Login once, then send prompts — bundled with file context — from your CLI or AI coding agent.
 
@@ -41,6 +41,7 @@ npx 10x-chat@latest login chatgpt       # Login to ChatGPT
 npx 10x-chat@latest login gemini         # Login to Gemini
 npx 10x-chat@latest login claude         # Login to Claude
 npx 10x-chat@latest login grok           # Login to Grok
+npx 10x-chat@latest login notebooklm     # Login to NotebookLM
 npx 10x-chat@latest login --status       # Check login status for all providers
 ```
 
@@ -59,7 +60,7 @@ npx 10x-chat@latest chat -p "Long task" --timeout 600000 --headed  # 10min timeo
 | Flag | Description |
 |------|-------------|
 | `-p, --prompt <text>` | **(required)** The prompt to send |
-| `--provider <name>` | Provider: `chatgpt`, `gemini`, `claude`, `grok` (default: config) |
+| `--provider <name>` | Provider: `chatgpt`, `gemini`, `claude`, `grok`, `notebooklm` (default: config) |
 | `--model <name>` | Model to select in the UI |
 | `-f, --file <paths...>` | Files/globs to bundle as context |
 | `--copy` | Copy bundle to clipboard instead of sending |
@@ -104,6 +105,25 @@ npx 10x-chat@latest skill install   # Install SKILL.md to ~/.codex/skills/
 npx 10x-chat@latest skill show      # Display SKILL.md content
 ```
 
+### `notebooklm` (alias: `nb`)
+
+Manage NotebookLM notebooks and sources via RPC API.
+
+```bash
+npx 10x-chat@latest notebooklm list                              # List all notebooks
+npx 10x-chat@latest notebooklm create "Research Topic"            # Create a notebook
+npx 10x-chat@latest notebooklm delete <notebookId>                # Delete a notebook
+npx 10x-chat@latest notebooklm sources <notebookId>               # List sources in notebook
+npx 10x-chat@latest notebooklm add-url <notebookId> <url>         # Add URL source
+npx 10x-chat@latest notebooklm add-url <notebookId> <url> --wait  # Add URL and wait for processing
+npx 10x-chat@latest notebooklm add-file <notebookId> ./paper.pdf  # Upload file source
+npx 10x-chat@latest notebooklm add-text <id> "Title" "Content"    # Add pasted text source
+npx 10x-chat@latest notebooklm summarize <notebookId>             # AI summary + suggested topics
+
+# Then chat with the notebook's sources:
+npx 10x-chat@latest chat -p "Summarize key points" --provider notebooklm
+```
+
 ## File Bundling
 
 The `--file` flag accepts globs. Files are assembled into a markdown bundle sent as the prompt:
@@ -122,7 +142,8 @@ Security-sensitive files (`.env*`, `*.pem`, `*.key`, etc.) are automatically exc
 │   ├── chatgpt/          # Playwright persistent browser profile
 │   ├── gemini/
 │   ├── claude/
-│   └── grok/
+│   ├── grok/
+│   └── notebooklm/       # NotebookLM browser profile (shared Google auth)
 ├── sessions/
 │   └── <uuid>/
 │       ├── meta.json     # Session metadata
@@ -149,6 +170,7 @@ This lets agents like Codex or Claude Code use 10x-chat to query other models fo
 | Gemini | ✅ | gemini.google.com |
 | Claude | ✅ | claude.ai |
 | Grok | ✅ | grok.com |
+| NotebookLM | ✅ | notebooklm.google.com |
 
 ## Development
 

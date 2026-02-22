@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { createChatCommand } from '../cli/chat.js';
 import { createConfigCommand } from '../cli/config.js';
 import { createLoginCommand } from '../cli/login.js';
+import { createNotebookLMCommand } from '../cli/notebooklm.js';
 import { createSkillCommand } from '../cli/skill.js';
 import { createSessionCommand, createStatusCommand } from '../cli/status.js';
 
@@ -21,6 +22,7 @@ program.addCommand(createStatusCommand());
 program.addCommand(createSessionCommand());
 program.addCommand(createConfigCommand());
 program.addCommand(createSkillCommand());
+program.addCommand(createNotebookLMCommand());
 
 program.parseAsync(process.argv).catch((error) => {
   console.error(chalk.red(error instanceof Error ? error.message : String(error)));
