@@ -6,25 +6,11 @@
 
 ## Use with OpenClaw
 
-10x-chat is built as a [skill](https://docs.openclaw.ai/skills) for [OpenClaw](https://openclaw.ai). Paste the SKILL.md URL into your OpenClaw assistant to install:
+Paste this into your [OpenClaw](https://openclaw.ai) chat to install as a skill:
 
 ```
 https://raw.githubusercontent.com/RealMikeChong/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
 ```
-
-Or install manually:
-
-```bash
-# Option 1: Copy the skill directory
-mkdir -p ~/.openclaw/skills/10x-chat
-curl -o ~/.openclaw/skills/10x-chat/SKILL.md \
-  https://raw.githubusercontent.com/RealMikeChong/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
-
-# Option 2: Use the built-in installer (also works for Codex, Claude Code)
-npx 10x-chat skill install
-```
-
-Once installed, your OpenClaw agent can call 10x-chat to cross-validate answers, get code reviews from other models, or ask a different AI when stuck.
 
 ## Install
 
