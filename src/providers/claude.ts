@@ -13,7 +13,8 @@ export const CLAUDE_CONFIG: ProviderConfig = {
 
 const SELECTORS = {
   composer: '[contenteditable="true"].ProseMirror, div[enterkeyhint="enter"]',
-  sendButton: 'button[aria-label="Send message"], button[aria-label="Send Message"], button[data-testid="send-message"]',
+  sendButton:
+    'button[aria-label="Send message"], button[aria-label="Send Message"], button[data-testid="send-message"]',
   responseTurn: '[data-is-streaming], .font-claude-message, [data-testid="assistant-message"]',
   fileInput: '[data-testid="file-upload"], #chat-input-file-upload-onpage',
 } as const;
