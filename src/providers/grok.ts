@@ -111,7 +111,8 @@ export const grokActions: ProviderActions = {
 
     while (Date.now() - startTime < timeoutMs) {
       const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-      const currentText = (await lastTurn.textContent())?.trim() ?? '';
+      const remainingMs = timeoutMs - (Date.now() - startTime);
+      const currentText = (await lastTurn.textContent({ timeout: remainingMs }))?.trim() ?? '';
 
       if (currentText === lastText) {
         stableCount++;
@@ -131,7 +132,8 @@ export const grokActions: ProviderActions = {
 
     // Extract the final HTML content
     const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-    const markdown = (await lastTurn.innerHTML()) ?? '';
+    const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const markdown = (await lastTurn.innerHTML({ timeout: remainingMs })) ?? '';
 
     const elapsed = Date.now() - startTime;
     const truncated = elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD;
