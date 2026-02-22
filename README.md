@@ -2,6 +2,8 @@
 
 > Chat with web AI agents (ChatGPT, Gemini, Claude, Grok, NotebookLM) from your terminal via browser automation.
 
+**English** | [繁體中文](./README-zh.md)
+
 10x-chat uses [Playwright](https://playwright.dev) to automate browser sessions with persisted login profiles. Login once, then send prompts — bundled with file context — from your CLI or AI coding agent.
 
 ## Use with OpenClaw
