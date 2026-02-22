@@ -69,7 +69,7 @@ export class ChatAPI {
 
     const reqId = this.core.nextReqIdStep();
     const urlParams = new URLSearchParams({
-      bl: process.env.NOTEBOOKLM_BL ?? 'boq_labs-tailwind-frontend_20251221.14_p0',
+      bl: process.env.NOTEBOOKLM_BL ?? 'boq_labs-tailwind-frontend_20260221.14_p0',
       hl: 'en',
       _reqid: String(reqId),
       rt: 'c',
@@ -209,12 +209,19 @@ export class ChatAPI {
 
     const lines = text.trim().split('\n');
     let longestAnswer = '';
+    let longestText = ''; // Fallback: longest text even if isAnswer is false
     const allReferences: ChatReference[] = [];
 
     const processChunk = (jsonStr: string): void => {
       const [chunkText, isAnswer, refs] = this.extractAnswerAndRefsFromChunk(jsonStr);
-      if (chunkText && isAnswer && chunkText.length > longestAnswer.length) {
-        longestAnswer = chunkText;
+      if (chunkText) {
+        // Track the longest text regardless of isAnswer for fallback
+        if (chunkText.length > longestText.length) {
+          longestText = chunkText;
+        }
+        if (isAnswer && chunkText.length > longestAnswer.length) {
+          longestAnswer = chunkText;
+        }
       }
       allReferences.push(...refs);
     };
@@ -241,7 +248,16 @@ export class ChatAPI {
     }
 
     if (!longestAnswer) {
-      console.debug(`No answer extracted from response (${lines.length} lines parsed)`);
+      if (longestText) {
+        // Fallback: API structure may have changed or notebook is empty —
+        // accept the longest text chunk even without the strict isAnswer flag
+        console.debug(
+          `No strict answer found — using longest text chunk as fallback (${longestText.length} chars)`,
+        );
+        longestAnswer = longestText;
+      } else {
+        console.debug(`No answer extracted from response (${lines.length} lines parsed)`);
+      }
     }
 
     for (let i = 0; i < allReferences.length; i += 1) {
@@ -302,6 +318,9 @@ export class ChatAPI {
             if (typeInfo.length > 0 && typeInfo[typeInfo.length - 1] === 1) {
               isAnswer = true;
             }
+          } else {
+            // No type_info at all — treat as answer (empty notebook or API change)
+            isAnswer = true;
           }
 
           const citations = this.parseCitations(first);
