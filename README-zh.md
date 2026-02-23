@@ -14,6 +14,10 @@
 https://raw.githubusercontent.com/RealMikeChong/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
 ```
 
+## 贊助商（其實我自己哈）廣告：
+
+如果你需要找到一起學習 AI 的伙伴，歡迎加入我們的社群「用AI發電」：https://www.pathunfold.com/mike
+
 ## 快速開始
 
 ```bash
