@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import chalk from 'chalk';
 import fg from 'fast-glob';
@@ -6,7 +6,7 @@ import { launchBrowser } from '../browser/index.js';
 import { loadConfig } from '../config.js';
 import { getProvider } from '../providers/index.js';
 import { createSession, saveBundle, saveResponse, updateSession } from '../session/index.js';
-import type { ChatOptions, ProviderName } from '../types.js';
+import type { ChatOptions, GeneratedImage, ProviderName } from '../types.js';
 import { buildBundle } from './bundle.js';
 
 export interface ChatResult {
@@ -15,6 +15,8 @@ export interface ChatResult {
   response: string;
   truncated: boolean;
   durationMs: number;
+  /** Images generated in the response (with local paths if saved). */
+  images?: GeneratedImage[];
 }
 
 /**
@@ -104,6 +106,19 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
 
     // Save response
     await saveResponse(session.id, captured.text);
+
+    // Download generated images if any
+    let savedImages: GeneratedImage[] | undefined;
+    if (captured.images && captured.images.length > 0) {
+      console.log(chalk.dim(`Found ${captured.images.length} generated image(s), downloading...`));
+      savedImages = await downloadImages(
+        browser.page,
+        captured.images,
+        session.id,
+        options.saveImages,
+      );
+    }
+
     await updateSession(session.id, {
       status: captured.truncated ? 'timeout' : 'completed',
       durationMs,
@@ -115,6 +130,7 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
       response: captured.text,
       truncated: captured.truncated,
       durationMs,
+      ...(savedImages && savedImages.length > 0 ? { images: savedImages } : {}),
     };
   } catch (error) {
     const durationMs = Date.now() - startTime;
@@ -128,6 +144,95 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
   } finally {
     await browser.close();
   }
+}
+
+/**
+ * Download generated images from the browser context (uses session cookies).
+ * Saves to --save-images dir or ~/.10x-chat/sessions/<id>/images/.
+ */
+async function downloadImages(
+  page: import('playwright').Page,
+  images: GeneratedImage[],
+  sessionId: string,
+  saveDir?: string,
+): Promise<GeneratedImage[]> {
+  const homedir = (await import('node:os')).homedir();
+  const outputDir = saveDir ?? path.join(homedir, '.10x-chat', 'sessions', sessionId, 'images');
+  await mkdir(outputDir, { recursive: true });
+
+  const results: GeneratedImage[] = [];
+  const context = page.context();
+
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+    try {
+      const url = img.url;
+      const cookies = await context.cookies([url]).catch(() => []);
+      const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+      let buf: Buffer;
+      let contentType = '';
+
+      // Try Node fetch with cookies first
+      const resp = await fetch(url, {
+        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      }).catch(() => null);
+
+      if (resp?.ok) {
+        buf = Buffer.from(await resp.arrayBuffer());
+        contentType = resp.headers.get('content-type') ?? '';
+      } else {
+        // Fallback: fetch via browser context (handles auth cookies + CORS)
+        const dataUrl = await page.evaluate(async (imgUrl: string) => {
+          try {
+            const r = await fetch(imgUrl, { credentials: 'include' });
+            if (!r.ok) return null;
+            const blob = await r.blob();
+            return new Promise<string | null>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            return null;
+          }
+        }, url);
+
+        if (!dataUrl) {
+          console.warn(
+            chalk.yellow(`  ⚠ Failed to download image ${i + 1}: HTTP ${resp?.status ?? 'N/A'}`),
+          );
+          results.push(img);
+          continue;
+        }
+
+        const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) {
+          results.push(img);
+          continue;
+        }
+        contentType = match[1];
+        buf = Buffer.from(match[2], 'base64');
+      }
+      const ext = contentType.includes('png')
+        ? 'png'
+        : contentType.includes('webp')
+          ? 'webp'
+          : 'jpg';
+
+      const filename = `image_${i + 1}.${ext}`;
+      const filePath = path.join(outputDir, filename);
+
+      await writeFile(filePath, buf);
+      console.log(chalk.green(`  ✓ Saved: ${filePath}`));
+      results.push({ ...img, localPath: filePath });
+    } catch (err) {
+      console.warn(chalk.yellow(`  ⚠ Error downloading image ${i + 1}: ${err}`));
+      results.push(img);
+    }
+  }
+
+  return results;
 }
 
 /**

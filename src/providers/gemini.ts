@@ -1,5 +1,10 @@
 import type { Page } from 'playwright';
-import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
+import type {
+  CapturedResponse,
+  GeneratedImage,
+  ProviderActions,
+  ProviderConfig,
+} from '../types.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   name: 'gemini',
@@ -175,12 +180,35 @@ export const geminiActions: ProviderActions = {
     const lastTurn = page.locator(SELECTORS.responseTurn).last();
     const markdown = (await lastTurn.innerHTML()) ?? '';
 
+    // Extract generated images (Imagen)
+    const images: GeneratedImage[] = await page.evaluate(() => {
+      const seen = new Set<string>();
+      const results: { url: string; alt: string; width: number; height: number }[] = [];
+      const imgs = Array.from(
+        document.querySelectorAll('img.image.loaded, img[alt*="AI generated"]'),
+      );
+      for (const img of imgs) {
+        const src = img.getAttribute('src') ?? '';
+        if (!src || seen.has(src)) continue;
+        seen.add(src);
+        const fullSizeUrl = src.includes('=s') ? src : `${src}=s1024-rj`;
+        results.push({
+          url: fullSizeUrl,
+          alt: img.getAttribute('alt') ?? '',
+          width: (img as HTMLImageElement).naturalWidth,
+          height: (img as HTMLImageElement).naturalHeight,
+        });
+      }
+      return results;
+    });
+
     const elapsed = Date.now() - startTime;
     return {
       text: lastText,
       markdown,
       truncated: elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD,
       thinkingTime: Math.round(elapsed / 1000),
+      ...(images.length > 0 ? { images } : {}),
     };
   },
 };

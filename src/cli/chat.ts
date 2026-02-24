@@ -17,6 +17,7 @@ export function createChatCommand(): Command {
     .option('--dry-run', 'Preview the bundle without sending')
     .option('--headed', 'Show browser window during chat')
     .option('--timeout <ms>', 'Response timeout in milliseconds', '300000')
+    .option('--save-images <dir>', 'Save generated images to directory')
     .action(async (options) => {
       const provider = options.provider as string | undefined;
       if (provider && !isValidProvider(provider)) {
@@ -58,6 +59,7 @@ export function createChatCommand(): Command {
           file: options.file,
           attach: options.attach,
           headed: options.headed,
+          saveImages: options.saveImages,
           timeoutMs: (() => {
             const t = Number.parseInt(options.timeout, 10);
             return Number.isFinite(t) && t > 0 ? t : 300_000;
@@ -67,6 +69,18 @@ export function createChatCommand(): Command {
         console.log('');
         console.log(chalk.bold.green('--- Response ---\n'));
         console.log(result.response);
+        console.log('');
+        if (result.images && result.images.length > 0) {
+          console.log(chalk.bold.green('\n--- Generated Images ---\n'));
+          for (const img of result.images) {
+            if (img.localPath) {
+              console.log(chalk.green(`  🖼 ${img.localPath}`));
+            } else {
+              console.log(chalk.dim(`  🔗 ${img.url?.slice(0, 100)}`));
+            }
+          }
+        }
+
         console.log('');
         console.log(chalk.dim(`Session: ${result.sessionId}`));
         console.log(chalk.dim(`Duration: ${Math.round(result.durationMs / 1000)}s`));

@@ -104,11 +104,15 @@ export const grokActions: ProviderActions = {
     const { timeoutMs, onChunk } = opts;
     const startTime = Date.now();
 
-    // Count existing assistant turns before our submission
-    const existingTurns = await page.locator(SELECTORS.assistantTurn).count();
+    // Grok redirects to a new conversation URL (grok.com/c/...) after submit.
+    // The response may already be rendered by the time we start counting,
+    // so we wait for the URL change first, then look for response content.
+    const initialUrl = page.url();
+    const remainingForNav = Math.min(timeoutMs, 30_000);
+    await page.waitForURL((url) => url.toString() !== initialUrl, { timeout: remainingForNav }).catch(() => {});
 
-    // Wait for a new assistant turn to appear
-    await page.locator(SELECTORS.assistantTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
+    // After navigation, wait for at least one response-content-markdown (assistant response)
+    await page.locator('.response-content-markdown').first().waitFor({ timeout: timeoutMs - (Date.now() - startTime) });
 
     // Poll until the response stops changing (streaming complete)
     let lastText = '';

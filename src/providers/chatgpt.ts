@@ -1,5 +1,10 @@
 import type { Page } from 'playwright';
-import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
+import type {
+  CapturedResponse,
+  GeneratedImage,
+  ProviderActions,
+  ProviderConfig,
+} from '../types.js';
 
 export const CHATGPT_CONFIG: ProviderConfig = {
   name: 'chatgpt',
@@ -132,11 +137,17 @@ export const chatgptActions: ProviderActions = {
       const isStreaming = stopBtn ? await stopBtn.isVisible() : false;
 
       const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-      const currentText = (await lastTurn.textContent())?.trim() ?? '';
+      const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+      const currentText = (await lastTurn.textContent({ timeout: remainingMs }))?.trim() ?? '';
+
+      // For image-generation responses, check if images are present
+      const hasImages = await page.evaluate(
+        () => document.querySelectorAll('img[alt="Generated image"]').length > 0,
+      );
 
       if (currentText === lastText && !isStreaming) {
         stableCount++;
-        if (stableCount >= STABLE_THRESHOLD && currentText.length > 0) {
+        if (stableCount >= STABLE_THRESHOLD && (currentText.length > 0 || hasImages)) {
           break;
         }
       } else {
@@ -152,7 +163,29 @@ export const chatgptActions: ProviderActions = {
 
     // Extract the final HTML content
     const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-    const markdown = (await lastTurn.innerHTML()) ?? '';
+    const finalRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const markdown = (await lastTurn.innerHTML({ timeout: finalRemainingMs })) ?? '';
+
+    // Extract generated images (DALL-E)
+    const images: GeneratedImage[] = await page.evaluate(() => {
+      const seen = new Set<string>();
+      const results: { url: string; alt: string; width: number; height: number }[] = [];
+      const imgs = Array.from(document.querySelectorAll('img[alt="Generated image"]'));
+      for (const img of imgs) {
+        const src = img.getAttribute('src') ?? '';
+        const idMatch = src.match(/[?&]id=([^&]+)/);
+        const key = idMatch ? idMatch[1] : src;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        results.push({
+          url: src,
+          alt: img.getAttribute('alt') ?? '',
+          width: (img as HTMLImageElement).naturalWidth,
+          height: (img as HTMLImageElement).naturalHeight,
+        });
+      }
+      return results;
+    });
 
     const elapsed = Date.now() - startTime;
     const truncated = elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD;
@@ -162,6 +195,7 @@ export const chatgptActions: ProviderActions = {
       markdown,
       truncated,
       thinkingTime: Math.round(elapsed / 1000),
+      ...(images.length > 0 ? { images } : {}),
     };
   },
 };
