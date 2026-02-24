@@ -1,5 +1,10 @@
 import type { Page } from 'playwright';
-import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
+import type {
+  CapturedResponse,
+  GeneratedImage,
+  ProviderActions,
+  ProviderConfig,
+} from '../types.js';
 
 export const GROK_CONFIG: ProviderConfig = {
   name: 'grok',
@@ -12,11 +17,12 @@ export const GROK_CONFIG: ProviderConfig = {
 };
 
 const SELECTORS = {
-  /** ProseMirror contenteditable composer */
-  composer: '.tiptap.ProseMirror[contenteditable="true"]',
+  /** Composer: textarea on landing page, ProseMirror in active conversations */
+  composer: 'textarea, .tiptap.ProseMirror[contenteditable="true"]',
   sendButton: 'button[aria-label="Submit"]',
-  /** Assistant messages are inside .items-start containers with .message-bubble */
-  assistantTurn: '.items-start .message-bubble',
+  /** Assistant response bubbles — use .message-bubble (both user & assistant use it;
+   *  captureResponse counts existing turns before submission to find the new one) */
+  assistantTurn: '.message-bubble',
   /** Login page indicators */
   loginPage: 'a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in")',
   modelSelector: '#model-select-trigger',
@@ -31,11 +37,12 @@ export const grokActions: ProviderActions = {
         page.waitForSelector(SELECTORS.loginPage, { timeout: 8_000 }),
       ]).catch(() => {});
 
-      const composer = await page.$(SELECTORS.composer);
-      if (composer) return true;
-
+      // Check login indicators FIRST — Grok shows a textarea even when not logged in
       const loginIndicator = await page.$(SELECTORS.loginPage);
       if (loginIndicator) return false;
+
+      const composer = await page.$(SELECTORS.composer);
+      if (composer) return true;
 
       return false;
     } catch {
@@ -114,9 +121,14 @@ export const grokActions: ProviderActions = {
       const remainingMs = timeoutMs - (Date.now() - startTime);
       const currentText = (await lastTurn.textContent({ timeout: remainingMs }))?.trim() ?? '';
 
+      const hasImages = await page.evaluate(
+        () =>
+          document.querySelectorAll('img[src*="assets.grok.com"][src*="/generated/"]').length > 0,
+      );
+
       if (currentText === lastText) {
         stableCount++;
-        if (stableCount >= STABLE_THRESHOLD && currentText.length > 0) {
+        if (stableCount >= STABLE_THRESHOLD && (currentText.length > 0 || hasImages)) {
           break;
         }
       } else {
@@ -135,6 +147,27 @@ export const grokActions: ProviderActions = {
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
     const markdown = (await lastTurn.innerHTML({ timeout: remainingMs })) ?? '';
 
+    // Extract generated images (Grok/Aurora)
+    const images: GeneratedImage[] = await page.evaluate(() => {
+      const seen = new Set<string>();
+      const results: { url: string; alt: string; width: number; height: number }[] = [];
+      const imgs = Array.from(
+        document.querySelectorAll('img[src*="assets.grok.com"][src*="/generated/"]'),
+      );
+      for (const img of imgs) {
+        const src = img.getAttribute('src') ?? '';
+        if (!src || seen.has(src)) continue;
+        seen.add(src);
+        results.push({
+          url: src,
+          alt: img.getAttribute('alt') ?? '',
+          width: (img as HTMLImageElement).naturalWidth,
+          height: (img as HTMLImageElement).naturalHeight,
+        });
+      }
+      return results;
+    });
+
     const elapsed = Date.now() - startTime;
     const truncated = elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD;
 
@@ -143,6 +176,7 @@ export const grokActions: ProviderActions = {
       markdown,
       truncated,
       thinkingTime: Math.round(elapsed / 1000),
+      ...(images.length > 0 ? { images } : {}),
     };
   },
 };
