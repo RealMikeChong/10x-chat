@@ -58,9 +58,7 @@ describe('Paths', () => {
 
   it('should return shared profile dir', () => {
     delete process.env.TEN_X_CHAT_HOME;
-    expect(getSharedProfileDir()).toBe(
-      path.join(os.homedir(), '.10x-chat', 'profiles', 'default'),
-    );
+    expect(getSharedProfileDir()).toBe(path.join(os.homedir(), '.10x-chat', 'profiles', 'default'));
   });
 
   it('should return isolated profile dir for a provider', () => {
