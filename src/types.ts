@@ -14,12 +14,27 @@ export interface ProviderConfig {
   defaultTimeoutMs: number;
 }
 
+export interface GeneratedImage {
+  /** Source URL of the generated image (may require auth cookies). */
+  url: string;
+  /** Alt text or description. */
+  alt?: string;
+  /** Natural width in pixels. */
+  width?: number;
+  /** Natural height in pixels. */
+  height?: number;
+  /** Local file path after download (set by orchestrator). */
+  localPath?: string;
+}
+
 export interface CapturedResponse {
   text: string;
   markdown: string;
   model?: string;
   thinkingTime?: number;
   truncated: boolean;
+  /** Images generated in the response (e.g. DALL-E, Imagen). */
+  images?: GeneratedImage[];
 }
 
 export interface ProviderActions {
@@ -99,4 +114,6 @@ export interface ChatOptions {
   dryRun?: boolean;
   headed?: boolean;
   timeoutMs?: number;
+  /** Directory to save generated images. Defaults to session dir. */
+  saveImages?: string;
 }
