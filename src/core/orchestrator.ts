@@ -48,6 +48,9 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
   console.log(chalk.dim(`Session: ${session.id}`));
   console.log(chalk.blue(`Provider: ${provider.config.displayName}`));
 
+  // Determine profile mode: CLI flag overrides config
+  const profileMode = options.isolatedProfile ? 'isolated' : config.profileMode;
+
   // Launch browser — if this fails, mark session as failed
   let browser: Awaited<ReturnType<typeof launchBrowser>>;
   try {
@@ -56,6 +59,7 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
       provider: providerName,
       headless,
       url: provider.config.url,
+      profileMode,
     });
   } catch (error) {
     await updateSession(session.id, { status: 'failed' });

@@ -1,8 +1,9 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { launchBrowser } from '../browser/index.js';
+import { loadConfig } from '../config.js';
 import { getProvider, isValidProvider, listProviders } from '../providers/index.js';
-import type { ProviderName } from '../types.js';
+import type { ProfileMode, ProviderName } from '../types.js';
 
 export function createLoginCommand(): Command {
   const cmd = new Command('login')
@@ -10,38 +11,65 @@ export function createLoginCommand(): Command {
     .argument('[provider]', 'Provider to login to (chatgpt, gemini, claude, grok)')
     .option('--all', 'Login to all providers')
     .option('--status', 'Check login status for all providers')
-    .action(async (providerArg?: string, options?: { all?: boolean; status?: boolean }) => {
-      if (options?.status) {
-        await checkLoginStatus();
-        return;
-      }
+    .option('--isolated-profile', 'Use per-provider browser profiles (backward compat)')
+    .action(
+      async (
+        providerArg?: string,
+        options?: { all?: boolean; status?: boolean; isolatedProfile?: boolean },
+      ) => {
+        const config = await loadConfig();
+        const profileMode: ProfileMode = options?.isolatedProfile
+          ? 'isolated'
+          : config.profileMode;
 
-      if (options?.all) {
-        for (const name of listProviders()) {
-          await loginToProvider(name);
+        if (options?.status) {
+          await checkLoginStatus(profileMode);
+          return;
         }
-        return;
-      }
 
-      if (!providerArg) {
-        console.log(chalk.yellow('Usage: 10x-chat login <provider>'));
-        console.log(chalk.dim(`Available providers: ${listProviders().join(', ')}`));
-        return;
-      }
+        if (profileMode === 'shared') {
+          console.log(
+            chalk.dim(
+              'Using shared profile (all providers share one browser profile). Use --isolated-profile for per-provider.',
+            ),
+          );
+        }
 
-      if (!isValidProvider(providerArg)) {
-        console.log(chalk.red(`Unknown provider: ${providerArg}`));
-        console.log(chalk.dim(`Available: ${listProviders().join(', ')}`));
-        process.exit(1);
-      }
+        if (options?.all) {
+          for (const name of listProviders()) {
+            await loginToProvider(name, profileMode);
+          }
+          return;
+        }
 
-      await loginToProvider(providerArg);
-    });
+        if (!providerArg) {
+          console.log(chalk.yellow('Usage: 10x-chat login <provider>'));
+          console.log(chalk.dim(`Available providers: ${listProviders().join(', ')}`));
+          if (profileMode === 'shared') {
+            console.log(
+              chalk.dim('Tip: In shared mode, login to one provider and all share the session.'),
+            );
+          }
+          return;
+        }
+
+        if (!isValidProvider(providerArg)) {
+          console.log(chalk.red(`Unknown provider: ${providerArg}`));
+          console.log(chalk.dim(`Available: ${listProviders().join(', ')}`));
+          process.exit(1);
+        }
+
+        await loginToProvider(providerArg, profileMode);
+      },
+    );
 
   return cmd;
 }
 
-async function loginToProvider(providerName: ProviderName): Promise<void> {
+async function loginToProvider(
+  providerName: ProviderName,
+  profileMode: ProfileMode = 'shared',
+): Promise<void> {
   const provider = getProvider(providerName);
   console.log(chalk.blue(`Opening ${provider.config.displayName} for login...`));
   console.log(chalk.dim('Please login in the browser window. The session will be saved.'));
@@ -50,6 +78,7 @@ async function loginToProvider(providerName: ProviderName): Promise<void> {
     provider: providerName,
     headless: false, // Always headed for login
     url: provider.config.loginUrl,
+    profileMode,
   });
 
   try {
@@ -72,8 +101,11 @@ async function loginToProvider(providerName: ProviderName): Promise<void> {
   }
 }
 
-async function checkLoginStatus(): Promise<void> {
+async function checkLoginStatus(profileMode: ProfileMode = 'shared'): Promise<void> {
   console.log(chalk.bold('Login Status\n'));
+  if (profileMode === 'shared') {
+    console.log(chalk.dim('(shared profile mode — all providers use the same browser profile)\n'));
+  }
 
   for (const name of listProviders()) {
     const provider = getProvider(name);
@@ -82,6 +114,7 @@ async function checkLoginStatus(): Promise<void> {
         provider: name,
         headless: true,
         url: provider.config.url,
+        profileMode,
       });
 
       try {

@@ -8,9 +8,25 @@ export function getAppDir(): string {
   return process.env.TEN_X_CHAT_HOME ?? path.join(os.homedir(), APP_DIR_NAME);
 }
 
-/** Profile directory for a specific provider: ~/.10x-chat/profiles/<provider> */
-export function getProfileDir(provider: string): string {
+/** Shared profile directory: ~/.10x-chat/profiles/default */
+export function getSharedProfileDir(): string {
+  return path.join(getAppDir(), 'profiles', 'default');
+}
+
+/** Isolated profile directory for a specific provider: ~/.10x-chat/profiles/<provider> */
+export function getIsolatedProfileDir(provider: string): string {
   return path.join(getAppDir(), 'profiles', provider);
+}
+
+/**
+ * Get the effective profile directory based on mode.
+ * - 'shared': single profile at ~/.10x-chat/profiles/default
+ * - 'isolated': per-provider at ~/.10x-chat/profiles/<provider>
+ *
+ * @deprecated Use getSharedProfileDir() or getIsolatedProfileDir() with explicit mode.
+ */
+export function getProfileDir(provider: string): string {
+  return getIsolatedProfileDir(provider);
 }
 
 /** Sessions root: ~/.10x-chat/sessions */

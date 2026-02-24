@@ -1,5 +1,15 @@
 import type { Page } from 'playwright';
 
+// ── Profile Types ───────────────────────────────────────────────
+
+/**
+ * Profile mode controls how browser profiles are managed:
+ * - 'shared': Single profile for all providers (login once, shared cookies). Default.
+ *   Note: shared mode means only one provider session can run at a time (lock constraint).
+ * - 'isolated': Separate profile per provider (original behavior, login per provider).
+ */
+export type ProfileMode = 'shared' | 'isolated';
+
 // ── Provider Types ──────────────────────────────────────────────
 
 export type ProviderName = 'chatgpt' | 'gemini' | 'claude' | 'grok' | 'notebooklm';
@@ -93,12 +103,15 @@ export interface AppConfig {
   defaultModel?: string;
   defaultTimeoutMs: number;
   headless: boolean;
+  /** Profile mode: 'shared' (default, single profile) or 'isolated' (per-provider profiles). */
+  profileMode: ProfileMode;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
   defaultProvider: 'chatgpt',
   defaultTimeoutMs: 5 * 60 * 1000, // 5 minutes
   headless: true,
+  profileMode: 'shared',
 };
 
 // ── CLI Option Types ────────────────────────────────────────────
@@ -116,4 +129,6 @@ export interface ChatOptions {
   timeoutMs?: number;
   /** Directory to save generated images. Defaults to session dir. */
   saveImages?: string;
+  /** Override to use isolated (per-provider) profiles regardless of config. */
+  isolatedProfile?: boolean;
 }

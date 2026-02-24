@@ -144,15 +144,23 @@ function getProfileDir(): string {
     ? process.env.TEN_X_CHAT_HOME.replace(/^~(?=$|[/])/, process.env.HOME ?? '')
     : path.join(process.env.HOME ?? '', '.10x-chat');
 
-  // Prefer the notebooklm profile (created by `login notebooklm`),
-  // fall back to gemini profile (shared Google auth)
+  // Resolution order:
+  // 1. notebooklm-specific profile (created by `login notebooklm --isolated-profile`)
+  // 2. shared default profile (created by `login` in shared mode — preferred)
+  // 3. gemini profile (legacy fallback, shared Google auth)
   const notebooklmDir = path.join(home, 'profiles', 'notebooklm');
+  const sharedDir = path.join(home, 'profiles', 'default');
   const geminiDir = path.join(home, 'profiles', 'gemini');
 
   try {
-    // Check if notebooklm profile has a Default/ directory (Chromium profile created by login)
     statSync(path.join(notebooklmDir, 'Default'));
     return notebooklmDir;
+  } catch {
+    // no notebooklm-specific profile
+  }
+  try {
+    statSync(path.join(sharedDir, 'Default'));
+    return sharedDir;
   } catch {
     return geminiDir;
   }

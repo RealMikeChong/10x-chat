@@ -18,6 +18,7 @@ export function createChatCommand(): Command {
     .option('--headed', 'Show browser window during chat')
     .option('--timeout <ms>', 'Response timeout in milliseconds', '300000')
     .option('--save-images <dir>', 'Save generated images to directory')
+    .option('--isolated-profile', 'Use per-provider browser profiles (backward compat)')
     .action(async (options) => {
       const provider = options.provider as string | undefined;
       if (provider && !isValidProvider(provider)) {
@@ -60,6 +61,7 @@ export function createChatCommand(): Command {
           attach: options.attach,
           headed: options.headed,
           saveImages: options.saveImages,
+          isolatedProfile: options.isolatedProfile,
           timeoutMs: (() => {
             const t = Number.parseInt(options.timeout, 10);
             return Number.isFinite(t) && t > 0 ? t : 300_000;

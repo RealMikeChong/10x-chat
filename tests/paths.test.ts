@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   getAppDir,
   getConfigPath,
+  getIsolatedProfileDir,
   getProfileDir,
   getSessionDir,
   getSessionsDir,
+  getSharedProfileDir,
 } from '../src/paths.js';
 
 describe('Paths', () => {
@@ -52,5 +54,24 @@ describe('Paths', () => {
   it('should return config path', () => {
     delete process.env.TEN_X_CHAT_HOME;
     expect(getConfigPath()).toBe(path.join(os.homedir(), '.10x-chat', 'config.json'));
+  });
+
+  it('should return shared profile dir', () => {
+    delete process.env.TEN_X_CHAT_HOME;
+    expect(getSharedProfileDir()).toBe(
+      path.join(os.homedir(), '.10x-chat', 'profiles', 'default'),
+    );
+  });
+
+  it('should return isolated profile dir for a provider', () => {
+    delete process.env.TEN_X_CHAT_HOME;
+    expect(getIsolatedProfileDir('gemini')).toBe(
+      path.join(os.homedir(), '.10x-chat', 'profiles', 'gemini'),
+    );
+  });
+
+  it('should have getProfileDir as backward-compat alias for getIsolatedProfileDir', () => {
+    delete process.env.TEN_X_CHAT_HOME;
+    expect(getProfileDir('claude')).toBe(getIsolatedProfileDir('claude'));
   });
 });
