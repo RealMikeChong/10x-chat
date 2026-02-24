@@ -41,9 +41,7 @@ interface SharedBrowserState {
 let sharedState: SharedBrowserState | null = null;
 let sharedLaunchPromise: Promise<SharedBrowserState> | null = null;
 
-async function getOrCreateSharedBrowser(
-  headless: boolean,
-): Promise<SharedBrowserState> {
+async function getOrCreateSharedBrowser(headless: boolean): Promise<SharedBrowserState> {
   // If already running with matching headless mode, reuse it
   if (sharedState && sharedState.headless === headless) {
     return sharedState;
@@ -117,7 +115,7 @@ async function closeSharedBrowser(): Promise<void> {
  * directory. Separate login state, separate browser process.
  */
 export async function launchBrowser(opts: LaunchOptions): Promise<BrowserSession> {
-  const { provider, headless = true, url, profileMode = 'shared' } = opts;
+  const { headless = true, url, profileMode = 'shared' } = opts;
 
   if (profileMode === 'isolated') {
     return launchIsolatedBrowser(opts);

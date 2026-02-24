@@ -82,9 +82,7 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
     if (s.isDirectory()) {
       console.log(chalk.yellow('⚠ Shared profile already exists at:'));
       console.log(chalk.dim(`  ${sharedDir}`));
-      console.log(
-        chalk.yellow('  Delete it first if you want to re-migrate, or use it as-is.\n'),
-      );
+      console.log(chalk.yellow('  Delete it first if you want to re-migrate, or use it as-is.\n'));
       return;
     }
   } catch {
@@ -98,7 +96,7 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
   for (const name of knownProviders) {
     const profilePath = path.join(profilesDir, name);
     const info = await getProfileInfo(profilePath, name);
-    if (info && info.hasDefault) {
+    if (info?.hasDefault) {
       profiles.push(info);
     }
   }
@@ -111,7 +109,9 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
   console.log(chalk.bold('Found profiles:\n'));
   for (const p of profiles) {
     const sizeMb = (p.sizeBytes / 1024 / 1024).toFixed(1);
-    console.log(`  ${chalk.blue(p.name.padEnd(12))} ${sizeMb.padStart(6)} MB  (${p.lastModified.toISOString().split('T')[0]})`);
+    console.log(
+      `  ${chalk.blue(p.name.padEnd(12))} ${sizeMb.padStart(6)} MB  (${p.lastModified.toISOString().split('T')[0]})`,
+    );
   }
   console.log('');
 
@@ -134,9 +134,7 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
   console.log(chalk.green(`Base profile: ${base.name} (will be copied as shared default)`));
   const others = profiles.filter((p) => p.name !== base.name);
   if (others.length > 0) {
-    console.log(
-      chalk.dim(`Cookies from: ${others.map((p) => p.name).join(', ')} will be merged`),
-    );
+    console.log(chalk.dim(`Cookies from: ${others.map((p) => p.name).join(', ')} will be merged`));
   }
   console.log('');
 
@@ -148,9 +146,7 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
       console.log(`  2. Merge cookies from ${others.map((p) => p.name).join(', ')}`);
     }
     if (!keep) {
-      console.log(
-        `  3. Remove old profiles: ${profiles.map((p) => p.name).join(', ')}`,
-      );
+      console.log(`  3. Remove old profiles: ${profiles.map((p) => p.name).join(', ')}`);
     }
     return;
   }
@@ -186,9 +182,7 @@ async function runMigration(options: { dryRun?: boolean; source?: string; keep?:
   console.log('');
   console.log(chalk.bold.green('✓ Migration complete!'));
   console.log(chalk.dim(`Shared profile: ${sharedDir}`));
-  console.log(
-    chalk.dim('All providers will now share this browser profile by default.'),
-  );
+  console.log(chalk.dim('All providers will now share this browser profile by default.'));
   console.log(chalk.dim('Use --isolated-profile to revert to per-provider mode.\n'));
 }
 

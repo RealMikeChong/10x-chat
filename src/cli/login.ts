@@ -18,9 +18,7 @@ export function createLoginCommand(): Command {
         options?: { all?: boolean; status?: boolean; isolatedProfile?: boolean },
       ) => {
         const config = await loadConfig();
-        const profileMode: ProfileMode = options?.isolatedProfile
-          ? 'isolated'
-          : config.profileMode;
+        const profileMode: ProfileMode = options?.isolatedProfile ? 'isolated' : config.profileMode;
 
         if (options?.status) {
           await checkLoginStatus(profileMode);
