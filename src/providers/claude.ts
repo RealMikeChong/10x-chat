@@ -15,7 +15,8 @@ const SELECTORS = {
   composer: '[contenteditable="true"].ProseMirror, div[enterkeyhint="enter"]',
   sendButton:
     'button[aria-label="Send message"], button[aria-label="Send Message"], button[data-testid="send-message"]',
-  responseTurn: '[data-is-streaming], .font-claude-message, [data-testid="assistant-message"]',
+  responseTurn:
+    '[data-is-streaming], .font-claude-message, .font-claude-response, [data-testid="assistant-message"], [data-testid="user-message"] ~ div',
   fileInput: '[data-testid="file-upload"], #chat-input-file-upload-onpage',
 } as const;
 

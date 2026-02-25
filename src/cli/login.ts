@@ -77,6 +77,7 @@ async function loginToProvider(
     headless: false, // Always headed for login
     url: provider.config.loginUrl,
     profileMode,
+    persistent: true, // Login needs persistent context to auto-save cookies
   });
 
   try {

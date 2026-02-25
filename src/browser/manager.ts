@@ -1,13 +1,15 @@
 import { mkdir } from 'node:fs/promises';
-import { type BrowserContext, chromium, type Page } from 'playwright';
+import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import { getIsolatedProfileDir, getSharedProfileDir } from '../paths.js';
 import type { ProfileMode, ProviderName } from '../types.js';
 import { acquireProfileLock, type ProfileLock } from './lock.js';
+import { loadStorageState, saveStorageState } from './state.js';
 
 export interface BrowserSession {
   context: BrowserContext;
   page: Page;
-  lock: ProfileLock;
+  /** Profile lock (only set in isolated mode; null in shared mode). */
+  lock: ProfileLock | null;
   close: () => Promise<void>;
 }
 
@@ -17,160 +19,164 @@ export interface LaunchOptions {
   /** Initial URL to navigate to after launch. */
   url?: string;
   /**
-   * Profile mode: 'shared' uses a single browser with multiple tabs,
-   * 'isolated' uses a per-provider browser (original behavior).
+   * Profile mode:
+   * - 'shared': each process launches its own browser but loads shared
+   *   cookies/storage from a common state file. Truly parallel across
+   *   processes — no locks, no conflicts.
+   * - 'isolated': per-provider persistent context with profile lock
+   *   (original behavior).
    * Defaults to 'shared'.
    */
   profileMode?: ProfileMode;
+  /**
+   * If true, use a persistent context even in shared mode.
+   * Used by `login` command which needs the user to interact and have
+   * state auto-persisted to disk. After login, storage state is exported
+   * for use by regular (non-persistent) shared sessions.
+   */
+  persistent?: boolean;
 }
 
-// ── Shared Browser Singleton ────────────────────────────────────
-//
-// In 'shared' mode, one Chromium persistent context stays alive and
-// each provider gets its own tab (page). The context closes when
-// the last tab closes.
-
-interface SharedBrowserState {
-  context: BrowserContext;
-  lock: ProfileLock;
-  pageCount: number;
-  headless: boolean;
-  profileDir: string;
-}
-
-let sharedState: SharedBrowserState | null = null;
-let sharedLaunchPromise: Promise<SharedBrowserState> | null = null;
-
-async function getOrCreateSharedBrowser(headless: boolean): Promise<SharedBrowserState> {
-  // If already running with matching headless mode, reuse it
-  if (sharedState && sharedState.headless === headless) {
-    return sharedState;
-  }
-
-  // If a launch is in progress, wait for it (prevents double-launch race)
-  if (sharedLaunchPromise) {
-    const state = await sharedLaunchPromise;
-    if (state.headless === headless) return state;
-    // Headless mode mismatch — close existing and relaunch
-    await closeSharedBrowser();
-  }
-
-  const profileDir = getSharedProfileDir();
-  await mkdir(profileDir, { recursive: true });
-
-  sharedLaunchPromise = (async () => {
-    const lock = await acquireProfileLock(profileDir);
-
-    let context: BrowserContext;
-    try {
-      context = await chromium.launchPersistentContext(profileDir, {
-        headless,
-        viewport: { width: 1280, height: 900 },
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--no-first-run',
-          '--no-default-browser-check',
-        ],
-      });
-    } catch (error) {
-      await lock.release();
-      throw error;
-    }
-
-    const state: SharedBrowserState = {
-      context,
-      lock,
-      pageCount: 0,
-      headless,
-      profileDir,
-    };
-    sharedState = state;
-    sharedLaunchPromise = null;
-    return state;
-  })();
-
-  return sharedLaunchPromise;
-}
-
-async function closeSharedBrowser(): Promise<void> {
-  if (!sharedState) return;
-  const state = sharedState;
-  sharedState = null;
-  sharedLaunchPromise = null;
-  try {
-    await state.context.close();
-  } finally {
-    await state.lock.release();
-  }
-}
+const CHROMIUM_ARGS = [
+  '--disable-blink-features=AutomationControlled',
+  '--no-first-run',
+  '--no-default-browser-check',
+];
 
 /**
  * Launch a browser session for a provider.
  *
- * In 'shared' mode (default): reuses a single Chromium instance with one tab
- * per provider. All providers share cookies/login state. Concurrent sessions
- * run as separate tabs in the same browser.
+ * **Shared mode (default):** Each process gets its own Chromium instance
+ * loaded with shared cookies from `~/.10x-chat/profiles/default/storage-state.json`.
+ * Multiple `npx 10x-chat` processes can run truly in parallel — no locks.
+ * On close, updated cookies are saved back.
  *
- * In 'isolated' mode: each provider gets its own Chromium instance and profile
- * directory. Separate login state, separate browser process.
+ * **Shared + persistent** (login only): Uses `launchPersistentContext` on the
+ * shared profile dir so the user can interact and cookies auto-persist.
+ * Requires profile lock (only one login at a time).
+ *
+ * **Isolated mode:** Each provider gets its own persistent Chromium context
+ * and profile directory. Original behavior with profile lock.
  */
 export async function launchBrowser(opts: LaunchOptions): Promise<BrowserSession> {
-  const { headless = true, url, profileMode = 'shared' } = opts;
+  const { profileMode = 'shared', persistent = false } = opts;
 
   if (profileMode === 'isolated') {
     return launchIsolatedBrowser(opts);
   }
 
-  // ── Shared mode: open a new tab in the shared browser ─────
-  const state = await getOrCreateSharedBrowser(headless);
-  state.pageCount++;
+  if (persistent) {
+    return launchSharedPersistentBrowser(opts);
+  }
 
+  return launchSharedBrowser(opts);
+}
+
+/**
+ * Shared mode (non-persistent): own browser + shared storage state.
+ * No lock needed — fully parallel across processes.
+ */
+async function launchSharedBrowser(opts: LaunchOptions): Promise<BrowserSession> {
+  const { headless = true, url } = opts;
+
+  const browser: Browser = await chromium.launch({
+    headless,
+    args: CHROMIUM_ARGS,
+  });
+
+  let context: BrowserContext;
   let page: Page;
   try {
-    // First call may reuse the blank tab that launchPersistentContext creates
-    const existingPages = state.context.pages();
-    const blankPage = existingPages.find(
-      (p) => p.url() === 'about:blank' || p.url() === 'chrome://newtab/',
-    );
+    // Load shared cookies/storage if available
+    const statePath = await loadStorageState();
+    context = await browser.newContext({
+      viewport: { width: 1280, height: 900 },
+      ...(statePath ? { storageState: statePath } : {}),
+    });
 
-    if (state.pageCount === 1 && blankPage) {
-      page = blankPage;
-    } else {
-      page = await state.context.newPage();
-    }
+    page = await context.newPage();
 
     if (url) {
       await page.goto(url, { waitUntil: 'domcontentloaded' });
     }
   } catch (error) {
-    state.pageCount--;
-    if (state.pageCount <= 0) {
-      await closeSharedBrowser();
-    }
+    await browser.close();
     throw error;
   }
 
   const close = async () => {
     try {
-      if (!page.isClosed()) {
-        await page.close();
-      }
-    } finally {
-      if (sharedState) {
-        sharedState.pageCount--;
-        if (sharedState.pageCount <= 0) {
-          await closeSharedBrowser();
-        }
-      }
+      // Save updated cookies/storage back to shared state
+      await saveStorageState(context);
+    } catch {
+      // best effort
+    }
+    try {
+      await context.close();
+    } catch {
+      // context may already be closed
+    }
+    try {
+      await browser.close();
+    } catch {
+      // browser may already be closed
     }
   };
 
-  return { context: state.context, page, lock: state.lock, close };
+  return { context, page, lock: null, close };
 }
 
 /**
- * Launch an isolated browser (original behavior).
- * One Chromium instance per provider, separate profile dir.
+ * Shared mode (persistent): for login command.
+ * Uses persistent context so cookies auto-save to disk.
+ * Requires lock since persistent contexts can't share a profile dir.
+ */
+async function launchSharedPersistentBrowser(opts: LaunchOptions): Promise<BrowserSession> {
+  const { headless = true, url } = opts;
+  const profileDir = getSharedProfileDir();
+  await mkdir(profileDir, { recursive: true });
+
+  const lock = await acquireProfileLock(profileDir);
+
+  let context: BrowserContext;
+  let page: Page;
+  try {
+    context = await chromium.launchPersistentContext(profileDir, {
+      headless,
+      viewport: { width: 1280, height: 900 },
+      args: CHROMIUM_ARGS,
+    });
+
+    page = context.pages()[0] ?? (await context.newPage());
+
+    if (url) {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+    }
+  } catch (error) {
+    await lock.release();
+    throw error;
+  }
+
+  const close = async () => {
+    try {
+      // Export storage state for non-persistent sessions to use
+      await saveStorageState(context);
+    } catch {
+      // best effort
+    }
+    try {
+      await context.close();
+    } finally {
+      await lock.release();
+    }
+  };
+
+  return { context, page, lock, close };
+}
+
+/**
+ * Isolated mode (original behavior).
+ * Per-provider persistent context with profile lock.
  */
 async function launchIsolatedBrowser(opts: LaunchOptions): Promise<BrowserSession> {
   const { provider, headless = true, url } = opts;
@@ -185,11 +191,7 @@ async function launchIsolatedBrowser(opts: LaunchOptions): Promise<BrowserSessio
     context = await chromium.launchPersistentContext(profileDir, {
       headless,
       viewport: { width: 1280, height: 900 },
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
+      args: CHROMIUM_ARGS,
     });
 
     page = context.pages()[0] ?? (await context.newPage());
@@ -211,11 +213,4 @@ async function launchIsolatedBrowser(opts: LaunchOptions): Promise<BrowserSessio
   };
 
   return { context, page, lock, close };
-}
-
-/**
- * Force-close the shared browser (useful for cleanup/testing).
- */
-export async function shutdownSharedBrowser(): Promise<void> {
-  await closeSharedBrowser();
 }
