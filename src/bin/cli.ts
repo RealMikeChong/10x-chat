@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { createChatCommand } from '../cli/chat.js';
@@ -10,12 +13,16 @@ import { createNotebookLMCommand } from '../cli/notebooklm.js';
 import { createSkillCommand } from '../cli/skill.js';
 import { createSessionCommand, createStatusCommand } from '../cli/status.js';
 
+// Read version from package.json at runtime (works for both src and dist)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+
 const program = new Command();
 
 program
   .name('10x-chat')
   .description('Chat with web AI agents (ChatGPT, Gemini, Claude) via browser automation')
-  .version('0.1.0');
+  .version(pkg.version);
 
 program.addCommand(createLoginCommand());
 program.addCommand(createChatCommand());
