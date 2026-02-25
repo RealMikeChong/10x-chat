@@ -28,6 +28,43 @@ const SELECTORS = {
   fileInput: 'input[type="file"]:not(#upload-photos):not(#upload-camera)',
 } as const;
 
+/**
+ * Dismiss ChatGPT onboarding modals, cookie banners, and other overlays
+ * that can block the composer input. Fails silently if no overlays are present.
+ */
+async function dismissOverlays(page: Page): Promise<void> {
+  const overlaySelectors = [
+    // Onboarding modal skip/dismiss buttons
+    '#modal-onboarding button:has-text("Skip")',
+    '#modal-onboarding button:has-text("Next")',
+    '#modal-onboarding button:has-text("Okay")',
+    '#modal-onboarding button:has-text("Got it")',
+    '#modal-onboarding button:has-text("Done")',
+    '[data-testid="onboarding-skip"]',
+    // Generic dialog dismiss
+    'dialog button:has-text("Dismiss")',
+    'dialog button:has-text("Close")',
+    '[role="dialog"] button[aria-label="Close"]',
+    // Cookie consent
+    'button:has-text("Decline optional cookies")',
+    'button:has-text("Accept all")',
+    // "Stay logged out" prompt
+    'button:has-text("Stay logged out")',
+  ];
+
+  for (const selector of overlaySelectors) {
+    try {
+      const btn = await page.$(selector);
+      if (btn && (await btn.isVisible())) {
+        await btn.click();
+        await page.waitForTimeout(300);
+      }
+    } catch {
+      // Ignore — overlay may not exist
+    }
+  }
+}
+
 export const chatgptActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
@@ -36,6 +73,9 @@ export const chatgptActions: ProviderActions = {
         page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }),
         page.waitForSelector(SELECTORS.loginPage, { timeout: 8_000 }),
       ]).catch(() => {});
+
+      // Dismiss any overlays that might be hiding the composer
+      await dismissOverlays(page);
 
       const composer = await page.$(SELECTORS.composer);
       if (composer) return true;
@@ -57,6 +97,9 @@ export const chatgptActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
+    // Dismiss onboarding/welcome modals that block the composer
+    await dismissOverlays(page);
+
     const composer = await page.waitForSelector(SELECTORS.composer, { timeout: 15_000 });
     if (!composer) {
       throw new Error(
