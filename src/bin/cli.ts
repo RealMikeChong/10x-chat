@@ -12,6 +12,7 @@ import { createMigrateCommand } from '../cli/migrate.js';
 import { createNotebookLMCommand } from '../cli/notebooklm.js';
 import { createSkillCommand } from '../cli/skill.js';
 import { createSessionCommand, createStatusCommand } from '../cli/status.js';
+import { createVideoCommand } from '../cli/video.js';
 
 // Read version from package.json at runtime (works for both src and dist)
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,7 @@ program
 
 program.addCommand(createLoginCommand());
 program.addCommand(createChatCommand());
+program.addCommand(createVideoCommand());
 program.addCommand(createStatusCommand());
 program.addCommand(createSessionCommand());
 program.addCommand(createConfigCommand());

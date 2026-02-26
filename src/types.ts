@@ -12,7 +12,7 @@ export type ProfileMode = 'shared' | 'isolated';
 
 // ── Provider Types ──────────────────────────────────────────────
 
-export type ProviderName = 'chatgpt' | 'gemini' | 'claude' | 'grok' | 'notebooklm';
+export type ProviderName = 'chatgpt' | 'gemini' | 'claude' | 'grok' | 'notebooklm' | 'flow';
 
 export interface ProviderConfig {
   name: ProviderName;
@@ -130,5 +130,37 @@ export interface ChatOptions {
   /** Directory to save generated images. Defaults to session dir. */
   saveImages?: string;
   /** Override to use isolated (per-provider) profiles regardless of config. */
+  isolatedProfile?: boolean;
+}
+
+// ── Video Generation Types ──────────────────────────────────────
+
+export type VideoMode = 'ingredients' | 'frames';
+export type VideoModel =
+  | 'Veo 3.1 - Fast'
+  | 'Veo 3.1 - Fast [Lower Priority]'
+  | 'Veo 3.1 - Quality'
+  | 'Veo 2 - Fast'
+  | 'Veo 2 - Quality';
+export type VideoOrientation = 'landscape' | 'portrait';
+
+export interface GeneratedVideo {
+  /** Local file path after download. */
+  localPath?: string;
+  /** Duration in seconds, if known. */
+  durationSecs?: number;
+}
+
+export interface VideoOptions {
+  prompt: string;
+  mode?: VideoMode;
+  model?: VideoModel;
+  orientation?: VideoOrientation;
+  count?: 1 | 2 | 3 | 4;
+  startFrame?: string;
+  endFrame?: string;
+  headed?: boolean;
+  timeoutMs?: number;
+  saveDir?: string;
   isolatedProfile?: boolean;
 }
