@@ -5,45 +5,58 @@ import { describe, expect, it, vi } from 'vitest';
  * Uses a lightweight Page mock since Playwright's real Page requires a browser.
  */
 
-// Minimal mock that simulates a Page with an onboarding modal
+// Minimal mock that simulates a Page with locator API
 function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: boolean } = {}) {
   const { hasOnboardingModal = false, hasComposer = true } = options;
+  const locatorCalls: string[] = [];
   const clickedSelectors: string[] = [];
 
-  const mockElement = (visible = true) => ({
-    click: vi.fn(async () => {}),
-    isVisible: vi.fn(async () => visible),
-    fill: vi.fn(async () => {}),
-  });
+  const mockLocator = (selector: string) => {
+    locatorCalls.push(selector);
+    const isOverlay = selector.includes('modal-onboarding') ||
+      selector.includes('dialog') || selector.includes('Close') ||
+      selector.includes('Decline') || selector.includes('Accept') ||
+      selector.includes('Stay logged out') || selector.includes('onboarding');
+    const isComposer = selector.includes('composer') || selector.includes('ProseMirror') ||
+      selector.includes('prompt-textarea') || selector.includes('textbox');
+    const isLogin = selector.includes('Log in') || selector.includes('Sign up');
 
-  const composerEl = hasComposer ? mockElement() : null;
-  const onboardingBtn = hasOnboardingModal ? mockElement(true) : null;
+    const visible = hasOnboardingModal && isOverlay
+      ? true
+      : hasComposer && isComposer
+        ? true
+        : false;
+
+    const locator = {
+      first: () => locator,
+      last: () => locator,
+      isVisible: vi.fn(async () => visible),
+      waitFor: vi.fn(async () => { }),
+      click: vi.fn(async () => {
+        if (visible) clickedSelectors.push(selector);
+      }),
+      fill: vi.fn(async () => { }),
+      count: vi.fn(async () => 0),
+      textContent: vi.fn(async () => ''),
+      innerHTML: vi.fn(async () => ''),
+      nth: (_n: number) => locator,
+    };
+    return locator;
+  };
 
   return {
     page: {
-      $: vi.fn(async (selector: string) => {
-        if (selector.includes('modal-onboarding') && selector.includes('Skip') && onboardingBtn) {
-          clickedSelectors.push(selector);
-          return onboardingBtn;
-        }
-        if (selector.includes('modal-onboarding') && onboardingBtn) {
-          return onboardingBtn;
-        }
-        if (selector.includes('composer') || selector.includes('ProseMirror')) {
-          return composerEl;
-        }
-        return null;
-      }),
-      waitForSelector: vi.fn(async () => composerEl),
-      waitForTimeout: vi.fn(async () => {}),
+      locator: vi.fn((selector: string) => mockLocator(selector)),
+      waitForTimeout: vi.fn(async () => { }),
+      waitForLoadState: vi.fn(async () => { }),
       keyboard: {
-        press: vi.fn(async () => {}),
+        press: vi.fn(async () => { }),
       },
-      evaluate: vi.fn(async () => {}),
+      evaluate: vi.fn(async () => { }),
+      url: vi.fn(() => 'https://chatgpt.com'),
     },
+    locatorCalls,
     clickedSelectors,
-    composerEl,
-    onboardingBtn,
   };
 }
 
@@ -51,17 +64,14 @@ describe('ChatGPT Overlay Dismissal', () => {
   it('should not crash when no overlays are present', async () => {
     const { page } = createMockPage({ hasOnboardingModal: false, hasComposer: true });
 
-    // Import the actions
     const { chatgptActions } = await import('../src/providers/chatgpt.js');
 
-    // submitPrompt should work fine without overlays
-    // We can't fully test submitPrompt without a real browser, but we can
-    // verify the overlay dismissal doesn't throw when no modals exist
+    // isLoggedIn should work fine without overlays — composer found, no login buttons
     await expect(chatgptActions.isLoggedIn(page as never)).resolves.toBeDefined();
   });
 
   it('should attempt to dismiss onboarding modal selectors', async () => {
-    const { page, onboardingBtn } = createMockPage({
+    const { page, locatorCalls, clickedSelectors } = createMockPage({
       hasOnboardingModal: true,
       hasComposer: true,
     });
@@ -71,39 +81,39 @@ describe('ChatGPT Overlay Dismissal', () => {
     // isLoggedIn calls dismissOverlays internally
     const result = await chatgptActions.isLoggedIn(page as never);
 
-    // Should have checked for overlay elements
-    const selectorCalls = page.$.mock.calls.map((c: unknown[]) => c[0] as string);
-    const overlayChecks = selectorCalls.filter(
+    // Should have called locator for overlay-related selectors
+    const overlayChecks = locatorCalls.filter(
       (s: string) => s.includes('modal-onboarding') || s.includes('dialog') || s.includes('Close'),
     );
     expect(overlayChecks.length).toBeGreaterThan(0);
 
-    // The onboarding button should have been clicked
-    if (onboardingBtn) {
-      expect(onboardingBtn.click).toHaveBeenCalled();
-    }
+    // Overlay buttons should have been clicked
+    expect(clickedSelectors.length).toBeGreaterThan(0);
 
     expect(result).toBe(true);
   });
 
   it('should handle overlay dismissal errors gracefully', async () => {
     const page = {
-      $: vi.fn(async () => {
-        throw new Error('Element detached');
-      }),
-      waitForSelector: vi.fn(async () => ({
+      locator: vi.fn(() => ({
+        first: vi.fn().mockReturnThis(),
+        last: vi.fn().mockReturnThis(),
+        isVisible: vi.fn(async () => { throw new Error('Element detached'); }),
+        waitFor: vi.fn(async () => { throw new Error('Element detached'); }),
         click: vi.fn(),
-        fill: vi.fn(),
+        count: vi.fn(async () => 0),
       })),
-      waitForTimeout: vi.fn(async () => {}),
+      waitForTimeout: vi.fn(async () => { }),
+      waitForLoadState: vi.fn(async () => { }),
       keyboard: { press: vi.fn() },
       evaluate: vi.fn(),
+      url: vi.fn(() => 'https://chatgpt.com'),
     };
 
     const { chatgptActions } = await import('../src/providers/chatgpt.js');
 
-    // Should not throw even if page.$ throws
+    // Should not throw even if locator methods throw
     const result = await chatgptActions.isLoggedIn(page as never);
-    expect(result).toBe(false); // Can't find composer when $ throws
+    expect(result).toBe(false); // Can't find composer when locator throws
   });
 });

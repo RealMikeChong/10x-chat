@@ -54,8 +54,8 @@ async function dismissOverlays(page: Page): Promise<void> {
 
   for (const selector of overlaySelectors) {
     try {
-      const btn = await page.$(selector);
-      if (btn && (await btn.isVisible())) {
+      const btn = page.locator(selector).first();
+      if (await btn.isVisible().catch(() => false)) {
         await btn.click();
         await page.waitForTimeout(300);
       }
@@ -69,19 +69,19 @@ export const chatgptActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       // Wait for either composer or login indicators to appear
-      await Promise.race([
-        page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }),
-        page.waitForSelector(SELECTORS.loginPage, { timeout: 8_000 }),
-      ]).catch(() => {});
+      await page.locator(`${SELECTORS.composer}, ${SELECTORS.loginPage}`).first()
+        .waitFor({ state: 'visible', timeout: 8_000 }).catch(() => { });
 
       // Dismiss any overlays that might be hiding the composer
       await dismissOverlays(page);
 
-      const composer = await page.$(SELECTORS.composer);
-      if (composer) return true;
+      const composerVisible = await page.locator(SELECTORS.composer)
+        .first().isVisible().catch(() => false);
+      if (composerVisible) return true;
 
-      const loginButton = await page.$(SELECTORS.loginPage);
-      if (loginButton) return false;
+      const loginVisible = await page.locator(SELECTORS.loginPage)
+        .first().isVisible().catch(() => false);
+      if (loginVisible) return false;
 
       return false;
     } catch {
@@ -100,15 +100,11 @@ export const chatgptActions: ProviderActions = {
     // Dismiss onboarding/welcome modals that block the composer
     await dismissOverlays(page);
 
-    const composer = await page.waitForSelector(SELECTORS.composer, { timeout: 15_000 });
-    if (!composer) {
-      throw new Error(
-        'ChatGPT composer not found. The UI may have changed. Try running with --headed to debug.',
-      );
-    }
+    const composer = page.locator(SELECTORS.composer).first();
+    await composer.waitFor({ state: 'visible', timeout: 15_000 });
 
     await composer.click();
-    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.press('Backspace');
 
     // Use evaluate for large text to avoid keyboard.type slowness
@@ -130,10 +126,8 @@ export const chatgptActions: ProviderActions = {
 
     await page.waitForTimeout(300);
 
-    const sendButton = await page.waitForSelector(SELECTORS.sendButton, { timeout: 5_000 });
-    if (!sendButton) {
-      throw new Error('ChatGPT send button not found. The UI may have changed.');
-    }
+    const sendButton = page.locator(SELECTORS.sendButton).first();
+    await sendButton.waitFor({ state: 'visible', timeout: 5_000 });
     await sendButton.click();
   },
 
@@ -176,8 +170,8 @@ export const chatgptActions: ProviderActions = {
 
     while (Date.now() - startTime < timeoutMs) {
       // If stop button is visible, streaming is still in progress — reset stability
-      const stopBtn = await page.$(SELECTORS.stopButton);
-      const isStreaming = stopBtn ? await stopBtn.isVisible() : false;
+      const isStreaming = await page.locator(SELECTORS.stopButton)
+        .first().isVisible().catch(() => false);
 
       const lastTurn = page.locator(SELECTORS.assistantTurn).last();
       const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);

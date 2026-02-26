@@ -5,6 +5,7 @@ import type {
   ProviderActions,
   ProviderConfig,
 } from '../types.js';
+import { pollUntilStable } from '../core/polling.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   name: 'gemini',
@@ -26,15 +27,17 @@ const SELECTORS = {
 export const geminiActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }).catch(() => {});
-      const composer = await page.$(SELECTORS.composer);
-      if (!composer) return false;
+      await page.locator(SELECTORS.composer).first()
+        .waitFor({ state: 'visible', timeout: 8_000 }).catch(() => { });
+      const composerVisible = await page.locator(SELECTORS.composer)
+        .first().isVisible().catch(() => false);
+      if (!composerVisible) return false;
       // Guest users see the composer but can't use authenticated features.
       // Require that no sign-in button is visible.
-      const signInBtn = await page.$(
+      const signInVisible = await page.locator(
         '.sign-in-button, a[href*="accounts.google.com"][class*=sign]',
-      );
-      if (signInBtn) return false;
+      ).first().isVisible().catch(() => false);
+      if (signInVisible) return false;
       return true;
     } catch {
       return false;
@@ -110,15 +113,11 @@ export const geminiActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
-    const composer = await page.waitForSelector(SELECTORS.composer, { timeout: 15_000 });
-    if (!composer) {
-      throw new Error(
-        'Gemini composer not found. The UI may have changed. Try running with --headed to debug.',
-      );
-    }
+    const composer = page.locator(SELECTORS.composer).first();
+    await composer.waitFor({ state: 'visible', timeout: 15_000 });
 
     await composer.click();
-    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.press('Backspace');
 
     try {
@@ -138,8 +137,8 @@ export const geminiActions: ProviderActions = {
 
     await page.waitForTimeout(300);
 
-    const sendButton = await page.waitForSelector(SELECTORS.sendButton, { timeout: 5_000 });
-    if (!sendButton) throw new Error('Gemini send button not found.');
+    const sendButton = page.locator(SELECTORS.sendButton).first();
+    await sendButton.waitFor({ state: 'visible', timeout: 5_000 });
     await sendButton.click();
   },
 
@@ -154,28 +153,13 @@ export const geminiActions: ProviderActions = {
 
     await page.locator(SELECTORS.responseTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
 
-    let lastText = '';
-    let stableCount = 0;
-    const STABLE_THRESHOLD = 3;
-    const POLL_INTERVAL = 1000;
-
-    while (Date.now() - startTime < timeoutMs) {
-      const lastTurn = page.locator(SELECTORS.responseTurn).last();
-      const currentText = (await lastTurn.textContent())?.trim() ?? '';
-
-      if (currentText === lastText) {
-        stableCount++;
-        if (stableCount >= STABLE_THRESHOLD && currentText.length > 0) break;
-      } else {
-        if (onChunk && currentText.length > lastText.length) {
-          onChunk(currentText.slice(lastText.length));
-        }
-        lastText = currentText;
-        stableCount = 0;
-      }
-
-      await page.waitForTimeout(POLL_INTERVAL);
-    }
+    const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const { text, elapsed: pollElapsed, truncated } = await pollUntilStable(page, {
+      getText: async (p) =>
+        (await p.locator(SELECTORS.responseTurn).last().textContent())?.trim() ?? '',
+      timeoutMs: remainingMs,
+      onChunk,
+    });
 
     const lastTurn = page.locator(SELECTORS.responseTurn).last();
     const markdown = (await lastTurn.innerHTML()) ?? '';
@@ -202,12 +186,12 @@ export const geminiActions: ProviderActions = {
       return results;
     });
 
-    const elapsed = Date.now() - startTime;
+    const totalElapsed = Date.now() - startTime;
     return {
-      text: lastText,
+      text,
       markdown,
-      truncated: elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD,
-      thinkingTime: Math.round(elapsed / 1000),
+      truncated,
+      thinkingTime: Math.round(totalElapsed / 1000),
       ...(images.length > 0 ? { images } : {}),
     };
   },

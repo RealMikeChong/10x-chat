@@ -23,8 +23,8 @@ const SELECTORS = {
   /** Assistant response bubbles — use .message-bubble (both user & assistant use it;
    *  captureResponse counts existing turns before submission to find the new one) */
   assistantTurn: '.message-bubble',
-  /** Login page indicators */
-  loginPage: 'a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in")',
+  /** Login page indicators — updated for current Grok UI (Feb 2026) */
+  loginPage: 'a[href*="x.com/i/flow/login"], a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("Log in")',
   modelSelector: '#model-select-trigger',
   fileInput: 'input[type="file"][name="files"]',
 } as const;
@@ -32,19 +32,19 @@ const SELECTORS = {
 export const grokActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await Promise.race([
-        page.waitForSelector(SELECTORS.composer, { timeout: 8_000 }),
-        page.waitForSelector(SELECTORS.loginPage, { timeout: 8_000 }),
-      ]).catch(() => {});
+      // Wait for page to settle — either composer or login indicator will appear
+      await page.waitForLoadState('domcontentloaded').catch(() => { });
+      await page.waitForTimeout(3000);
 
       // Check login indicators FIRST — Grok shows a textarea even when not logged in
-      const loginIndicator = await page.$(SELECTORS.loginPage);
-      if (loginIndicator) return false;
+      const loginVisible = await page.locator(SELECTORS.loginPage)
+        .first().isVisible({ timeout: 5000 }).catch(() => false);
+      if (loginVisible) return false;
 
-      const composer = await page.$(SELECTORS.composer);
-      if (composer) return true;
-
-      return false;
+      // Then check for the composer
+      const composerVisible = await page.locator(SELECTORS.composer)
+        .first().isVisible({ timeout: 5000 }).catch(() => false);
+      return composerVisible;
     } catch {
       return false;
     }
@@ -57,15 +57,11 @@ export const grokActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
-    const composer = await page.waitForSelector(SELECTORS.composer, { timeout: 15_000 });
-    if (!composer) {
-      throw new Error(
-        'Grok composer not found. The UI may have changed. Try running with --headed to debug.',
-      );
-    }
+    const composer = page.locator(SELECTORS.composer).first();
+    await composer.waitFor({ state: 'visible', timeout: 15_000 });
 
     await composer.click();
-    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.press('Backspace');
 
     // Use evaluate for large text to avoid keyboard.type slowness
@@ -88,12 +84,8 @@ export const grokActions: ProviderActions = {
     await page.waitForTimeout(300);
 
     // Wait for submit button to become enabled
-    const sendButton = await page.waitForSelector(`${SELECTORS.sendButton}:not([disabled])`, {
-      timeout: 5_000,
-    });
-    if (!sendButton) {
-      throw new Error('Grok send button not found or still disabled. The UI may have changed.');
-    }
+    const sendButton = page.locator(`${SELECTORS.sendButton}:not([disabled])`).first();
+    await sendButton.waitFor({ state: 'visible', timeout: 5_000 });
     await sendButton.click();
   },
 
@@ -111,7 +103,7 @@ export const grokActions: ProviderActions = {
     const remainingForNav = Math.min(timeoutMs, 30_000);
     await page
       .waitForURL((url) => url.toString() !== initialUrl, { timeout: remainingForNav })
-      .catch(() => {});
+      .catch(() => { });
 
     // After navigation, wait for at least one response-content-markdown (assistant response)
     await page

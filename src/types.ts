@@ -5,7 +5,7 @@ import type { Page } from 'playwright';
 /**
  * Profile mode controls how browser profiles are managed:
  * - 'shared': Single profile for all providers (login once, shared cookies). Default.
- *   Note: shared mode means only one provider session can run at a time (lock constraint).
+ *   Multiple non-persistent sessions can run truly in parallel — no locks.
  * - 'isolated': Separate profile per provider (original behavior, login per provider).
  */
 export type ProfileMode = 'shared' | 'isolated';
