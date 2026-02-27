@@ -40,7 +40,10 @@ export async function registerTab(): Promise<string> {
   const tabKey = `${process.pid}-${tabId}`;
   const filePath = path.join(dir, `${tabKey}.tab`);
 
-  await writeFile(filePath, JSON.stringify({ pid: process.pid, tabId, createdAt: new Date().toISOString() }));
+  await writeFile(
+    filePath,
+    JSON.stringify({ pid: process.pid, tabId, createdAt: new Date().toISOString() }),
+  );
   return tabKey;
 }
 

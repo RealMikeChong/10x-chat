@@ -2,10 +2,10 @@ import { mkdir } from 'node:fs/promises';
 import { type BrowserContext, chromium, type Page } from 'playwright';
 import { getIsolatedProfileDir, getSharedProfileDir } from '../paths.js';
 import type { ProfileMode, ProviderName } from '../types.js';
+import { getOrLaunchBrowserDaemon, stopDaemon } from './daemon.js';
 import { acquireProfileLock, type ProfileLock } from './lock.js';
-import { clearDaemonState, getOrLaunchBrowserDaemon, stopDaemon } from './daemon.js';
-import { registerTab, unregisterTab } from './tabs.js';
 import { loadStorageState, saveStorageState } from './state.js';
+import { registerTab, unregisterTab } from './tabs.js';
 
 export interface BrowserSession {
   context: BrowserContext;

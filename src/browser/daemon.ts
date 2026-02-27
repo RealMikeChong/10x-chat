@@ -13,7 +13,7 @@
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium, type Browser } from 'playwright';
+import { type Browser, chromium } from 'playwright';
 import { getAppDir } from '../paths.js';
 
 const DAEMON_FILE = 'browser-daemon.json';

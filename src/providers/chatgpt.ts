@@ -69,18 +69,27 @@ export const chatgptActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       // Wait for either composer or login indicators to appear
-      await page.locator(`${SELECTORS.composer}, ${SELECTORS.loginPage}`).first()
-        .waitFor({ state: 'visible', timeout: 8_000 }).catch(() => { });
+      await page
+        .locator(`${SELECTORS.composer}, ${SELECTORS.loginPage}`)
+        .first()
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .catch(() => {});
 
       // Dismiss any overlays that might be hiding the composer
       await dismissOverlays(page);
 
-      const composerVisible = await page.locator(SELECTORS.composer)
-        .first().isVisible().catch(() => false);
+      const composerVisible = await page
+        .locator(SELECTORS.composer)
+        .first()
+        .isVisible()
+        .catch(() => false);
       if (composerVisible) return true;
 
-      const loginVisible = await page.locator(SELECTORS.loginPage)
-        .first().isVisible().catch(() => false);
+      const loginVisible = await page
+        .locator(SELECTORS.loginPage)
+        .first()
+        .isVisible()
+        .catch(() => false);
       if (loginVisible) return false;
 
       return false;
@@ -170,8 +179,11 @@ export const chatgptActions: ProviderActions = {
 
     while (Date.now() - startTime < timeoutMs) {
       // If stop button is visible, streaming is still in progress — reset stability
-      const isStreaming = await page.locator(SELECTORS.stopButton)
-        .first().isVisible().catch(() => false);
+      const isStreaming = await page
+        .locator(SELECTORS.stopButton)
+        .first()
+        .isVisible()
+        .catch(() => false);
 
       const lastTurn = page.locator(SELECTORS.assistantTurn).last();
       const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);

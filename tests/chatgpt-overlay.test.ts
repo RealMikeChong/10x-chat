@@ -13,29 +13,33 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
 
   const mockLocator = (selector: string) => {
     locatorCalls.push(selector);
-    const isOverlay = selector.includes('modal-onboarding') ||
-      selector.includes('dialog') || selector.includes('Close') ||
-      selector.includes('Decline') || selector.includes('Accept') ||
-      selector.includes('Stay logged out') || selector.includes('onboarding');
-    const isComposer = selector.includes('composer') || selector.includes('ProseMirror') ||
-      selector.includes('prompt-textarea') || selector.includes('textbox');
-    const isLogin = selector.includes('Log in') || selector.includes('Sign up');
+    const isOverlay =
+      selector.includes('modal-onboarding') ||
+      selector.includes('dialog') ||
+      selector.includes('Close') ||
+      selector.includes('Decline') ||
+      selector.includes('Accept') ||
+      selector.includes('Stay logged out') ||
+      selector.includes('onboarding');
+    const isComposer =
+      selector.includes('composer') ||
+      selector.includes('ProseMirror') ||
+      selector.includes('prompt-textarea') ||
+      selector.includes('textbox');
+    const _isLogin = selector.includes('Log in') || selector.includes('Sign up');
 
-    const visible = hasOnboardingModal && isOverlay
-      ? true
-      : hasComposer && isComposer
-        ? true
-        : false;
+    const visible =
+      hasOnboardingModal && isOverlay ? true : hasComposer && isComposer ? true : false;
 
     const locator = {
       first: () => locator,
       last: () => locator,
       isVisible: vi.fn(async () => visible),
-      waitFor: vi.fn(async () => { }),
+      waitFor: vi.fn(async () => {}),
       click: vi.fn(async () => {
         if (visible) clickedSelectors.push(selector);
       }),
-      fill: vi.fn(async () => { }),
+      fill: vi.fn(async () => {}),
       count: vi.fn(async () => 0),
       textContent: vi.fn(async () => ''),
       innerHTML: vi.fn(async () => ''),
@@ -47,12 +51,12 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
   return {
     page: {
       locator: vi.fn((selector: string) => mockLocator(selector)),
-      waitForTimeout: vi.fn(async () => { }),
-      waitForLoadState: vi.fn(async () => { }),
+      waitForTimeout: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
       keyboard: {
-        press: vi.fn(async () => { }),
+        press: vi.fn(async () => {}),
       },
-      evaluate: vi.fn(async () => { }),
+      evaluate: vi.fn(async () => {}),
       url: vi.fn(() => 'https://chatgpt.com'),
     },
     locatorCalls,
@@ -98,13 +102,17 @@ describe('ChatGPT Overlay Dismissal', () => {
       locator: vi.fn(() => ({
         first: vi.fn().mockReturnThis(),
         last: vi.fn().mockReturnThis(),
-        isVisible: vi.fn(async () => { throw new Error('Element detached'); }),
-        waitFor: vi.fn(async () => { throw new Error('Element detached'); }),
+        isVisible: vi.fn(async () => {
+          throw new Error('Element detached');
+        }),
+        waitFor: vi.fn(async () => {
+          throw new Error('Element detached');
+        }),
         click: vi.fn(),
         count: vi.fn(async () => 0),
       })),
-      waitForTimeout: vi.fn(async () => { }),
-      waitForLoadState: vi.fn(async () => { }),
+      waitForTimeout: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
       keyboard: { press: vi.fn() },
       evaluate: vi.fn(),
       url: vi.fn(() => 'https://chatgpt.com'),

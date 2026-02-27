@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import fg from 'fast-glob';
 import { launchBrowser } from '../browser/index.js';
 import { loadConfig } from '../config.js';
-import { getProvider, listProviders } from '../providers/index.js';
+import { getProvider } from '../providers/index.js';
 import { createSession, saveBundle, saveResponse, updateSession } from '../session/index.js';
 import type { ChatOptions, GeneratedImage, ProviderName } from '../types.js';
 import { buildBundle } from './bundle.js';
@@ -181,7 +181,9 @@ export async function runChatAll(options: ChatOptions): Promise<ChatAllResult[]>
   });
 
   return Promise.allSettled(tasks).then((settled) =>
-    settled.map((s) => (s.status === 'fulfilled' ? s.value : { provider: 'chatgpt', error: String(s.reason) })),
+    settled.map((s) =>
+      s.status === 'fulfilled' ? s.value : { provider: 'chatgpt', error: String(s.reason) },
+    ),
   );
 }
 

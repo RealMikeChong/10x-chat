@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
-import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
 import { pollUntilStable } from '../core/polling.js';
+import type { CapturedResponse, ProviderActions, ProviderConfig } from '../types.js';
 
 export const CLAUDE_CONFIG: ProviderConfig = {
   name: 'claude',
@@ -24,10 +24,16 @@ const SELECTORS = {
 export const claudeActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await page.locator(SELECTORS.composer).first()
-        .waitFor({ state: 'visible', timeout: 8_000 }).catch(() => { });
-      const composerVisible = await page.locator(SELECTORS.composer)
-        .first().isVisible().catch(() => false);
+      await page
+        .locator(SELECTORS.composer)
+        .first()
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .catch(() => {});
+      const composerVisible = await page
+        .locator(SELECTORS.composer)
+        .first()
+        .isVisible()
+        .catch(() => false);
       return composerVisible;
     } catch {
       return false;
@@ -82,7 +88,11 @@ export const claudeActions: ProviderActions = {
     await page.locator(SELECTORS.responseTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
 
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-    const { text, elapsed: pollElapsed, truncated } = await pollUntilStable(page, {
+    const {
+      text,
+      elapsed: _pollElapsed,
+      truncated,
+    } = await pollUntilStable(page, {
       getText: async (p) =>
         (await p.locator(SELECTORS.responseTurn).last().textContent())?.trim() ?? '',
       timeoutMs: remainingMs,

@@ -1,11 +1,11 @@
 import type { Page } from 'playwright';
+import { pollUntilStable } from '../core/polling.js';
 import type {
   CapturedResponse,
   GeneratedImage,
   ProviderActions,
   ProviderConfig,
 } from '../types.js';
-import { pollUntilStable } from '../core/polling.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   name: 'gemini',
@@ -27,16 +27,24 @@ const SELECTORS = {
 export const geminiActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
-      await page.locator(SELECTORS.composer).first()
-        .waitFor({ state: 'visible', timeout: 8_000 }).catch(() => { });
-      const composerVisible = await page.locator(SELECTORS.composer)
-        .first().isVisible().catch(() => false);
+      await page
+        .locator(SELECTORS.composer)
+        .first()
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .catch(() => {});
+      const composerVisible = await page
+        .locator(SELECTORS.composer)
+        .first()
+        .isVisible()
+        .catch(() => false);
       if (!composerVisible) return false;
       // Guest users see the composer but can't use authenticated features.
       // Require that no sign-in button is visible.
-      const signInVisible = await page.locator(
-        '.sign-in-button, a[href*="accounts.google.com"][class*=sign]',
-      ).first().isVisible().catch(() => false);
+      const signInVisible = await page
+        .locator('.sign-in-button, a[href*="accounts.google.com"][class*=sign]')
+        .first()
+        .isVisible()
+        .catch(() => false);
       if (signInVisible) return false;
       return true;
     } catch {
@@ -154,7 +162,11 @@ export const geminiActions: ProviderActions = {
     await page.locator(SELECTORS.responseTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
 
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-    const { text, elapsed: pollElapsed, truncated } = await pollUntilStable(page, {
+    const {
+      text,
+      elapsed: _pollElapsed,
+      truncated,
+    } = await pollUntilStable(page, {
       getText: async (p) =>
         (await p.locator(SELECTORS.responseTurn).last().textContent())?.trim() ?? '',
       timeoutMs: remainingMs,

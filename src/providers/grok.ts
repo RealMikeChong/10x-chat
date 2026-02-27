@@ -24,7 +24,8 @@ const SELECTORS = {
    *  captureResponse counts existing turns before submission to find the new one) */
   assistantTurn: '.message-bubble',
   /** Login page indicators — updated for current Grok UI (Feb 2026) */
-  loginPage: 'a[href*="x.com/i/flow/login"], a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("Log in")',
+  loginPage:
+    'a[href*="x.com/i/flow/login"], a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("Log in")',
   modelSelector: '#model-select-trigger',
   fileInput: 'input[type="file"][name="files"]',
 } as const;
@@ -33,17 +34,23 @@ export const grokActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       // Wait for page to settle — either composer or login indicator will appear
-      await page.waitForLoadState('domcontentloaded').catch(() => { });
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
       await page.waitForTimeout(3000);
 
       // Check login indicators FIRST — Grok shows a textarea even when not logged in
-      const loginVisible = await page.locator(SELECTORS.loginPage)
-        .first().isVisible({ timeout: 5000 }).catch(() => false);
+      const loginVisible = await page
+        .locator(SELECTORS.loginPage)
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
       if (loginVisible) return false;
 
       // Then check for the composer
-      const composerVisible = await page.locator(SELECTORS.composer)
-        .first().isVisible({ timeout: 5000 }).catch(() => false);
+      const composerVisible = await page
+        .locator(SELECTORS.composer)
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
       return composerVisible;
     } catch {
       return false;
@@ -103,7 +110,7 @@ export const grokActions: ProviderActions = {
     const remainingForNav = Math.min(timeoutMs, 30_000);
     await page
       .waitForURL((url) => url.toString() !== initialUrl, { timeout: remainingForNav })
-      .catch(() => { });
+      .catch(() => {});
 
     // After navigation, wait for at least one response-content-markdown (assistant response)
     await page

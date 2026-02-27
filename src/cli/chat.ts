@@ -85,7 +85,11 @@ export function createChatCommand(): Command {
               console.log(DIVIDER);
               console.log(r.result.response);
               console.log(DIVIDER);
-              console.log(chalk.dim(`  Session: ${r.result.sessionId}  |  ${Math.round(r.result.durationMs / 1000)}s${r.result.truncated ? '  ⚠ truncated' : ''}`));
+              console.log(
+                chalk.dim(
+                  `  Session: ${r.result.sessionId}  |  ${Math.round(r.result.durationMs / 1000)}s${r.result.truncated ? '  ⚠ truncated' : ''}`,
+                ),
+              );
             } else {
               console.log(chalk.bold.red(`▶ ${r.provider.toUpperCase()} — FAILED`));
               console.log(chalk.red(`  ${r.error}`));
