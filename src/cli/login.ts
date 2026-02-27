@@ -2,8 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { chromium } from 'playwright';
-import { acquireProfileLock } from '../browser/index.js';
-import { launchBrowser } from '../browser/index.js';
+import { acquireProfileLock, launchBrowser } from '../browser/index.js';
 import { saveStorageState } from '../browser/state.js';
 import { loadConfig } from '../config.js';
 import { getSharedProfileDir } from '../paths.js';
@@ -117,7 +116,7 @@ async function loginToProvider(
  */
 async function loginAllWithTabs(
   providers: ProviderName[],
-  profileMode: ProfileMode = 'shared',
+  _profileMode: ProfileMode = 'shared',
 ): Promise<void> {
   console.log(chalk.blue(`Opening ${providers.length} providers as tabs in one browser window...`));
   console.log(chalk.dim('Login to each tab. Window will close automatically when all are done.\n'));
