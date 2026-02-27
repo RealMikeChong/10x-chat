@@ -84,9 +84,9 @@ export const grokActions: ProviderActions = {
     await page.waitForTimeout(300);
 
     // Wait for submit button to become enabled
-    const sendButton = page.locator(`${SELECTORS.sendButton}:not([disabled])`).first();
-    await sendButton.waitFor({ state: 'visible', timeout: 5_000 });
-    await sendButton.click();
+    const sendSel = `${SELECTORS.sendButton}:not([disabled])`;
+    await page.locator(sendSel).first().waitFor({ state: 'visible', timeout: 5_000 });
+    await page.click(sendSel);
   },
 
   async captureResponse(
