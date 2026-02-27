@@ -1,8 +1,10 @@
 import { mkdir } from 'node:fs/promises';
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
+import { type BrowserContext, chromium, type Page } from 'playwright';
 import { getIsolatedProfileDir, getSharedProfileDir } from '../paths.js';
 import type { ProfileMode, ProviderName } from '../types.js';
 import { acquireProfileLock, type ProfileLock } from './lock.js';
+import { clearDaemonState, getOrLaunchBrowserDaemon, stopDaemon } from './daemon.js';
+import { registerTab, unregisterTab } from './tabs.js';
 import { loadStorageState, saveStorageState } from './state.js';
 
 export interface BrowserSession {
@@ -37,6 +39,7 @@ export interface LaunchOptions {
   persistent?: boolean;
 }
 
+/** Chromium launch args shared by persistent/isolated modes. */
 const CHROMIUM_ARGS = [
   '--disable-blink-features=AutomationControlled',
   '--no-first-run',
@@ -73,16 +76,18 @@ export async function launchBrowser(opts: LaunchOptions): Promise<BrowserSession
 }
 
 /**
- * Shared mode (non-persistent): own browser + shared storage state.
- * No lock needed — fully parallel across processes.
+ * Shared mode (non-persistent): connects to or launches a shared browser daemon.
+ * Multiple CLI invocations share the same Chromium process. Browser is only
+ * stopped when the last tab (across all invocations) is closed.
  */
 async function launchSharedBrowser(opts: LaunchOptions): Promise<BrowserSession> {
   const { headless = true, url } = opts;
 
-  const browser: Browser = await chromium.launch({
-    headless,
-    args: CHROMIUM_ARGS,
-  });
+  // Connect to or launch the shared browser daemon
+  const browser = await getOrLaunchBrowserDaemon(headless);
+
+  // Register this tab in the disk-persisted ref count
+  const tabKey = await registerTab();
 
   let context: BrowserContext;
   let page: Page;
@@ -100,27 +105,38 @@ async function launchSharedBrowser(opts: LaunchOptions): Promise<BrowserSession>
       await page.goto(url, { waitUntil: 'domcontentloaded' });
     }
   } catch (error) {
-    await browser.close();
+    // Unregister tab on failure
+    await unregisterTab(tabKey);
     throw error;
   }
 
   const close = async () => {
+    // Save updated cookies/storage back to shared state
     try {
-      // Save updated cookies/storage back to shared state
       await saveStorageState(context);
     } catch {
       // best effort
     }
+
+    // Close just this page and context (not the whole browser)
+    try {
+      await page.close();
+    } catch {
+      // already closed
+    }
     try {
       await context.close();
     } catch {
-      // context may already be closed
+      // already closed
     }
-    try {
-      await browser.close();
-    } catch {
-      // browser may already be closed
+
+    // Unregister tab and check if we're the last one
+    const remaining = await unregisterTab(tabKey);
+    if (remaining === 0) {
+      // Last tab — stop the browser daemon entirely
+      await stopDaemon();
     }
+    // else: other tabs still open — leave daemon running
   };
 
   return { context, page, lock: null, close };
