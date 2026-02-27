@@ -1,2 +1,2 @@
 export { buildBundle } from './bundle.js';
-export { type ChatResult, runChat } from './orchestrator.js';
+export { type ChatAllResult, type ChatResult, runChat, runChatAll } from './orchestrator.js';

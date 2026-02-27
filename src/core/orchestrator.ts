@@ -4,10 +4,13 @@ import chalk from 'chalk';
 import fg from 'fast-glob';
 import { launchBrowser } from '../browser/index.js';
 import { loadConfig } from '../config.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, listProviders } from '../providers/index.js';
 import { createSession, saveBundle, saveResponse, updateSession } from '../session/index.js';
 import type { ChatOptions, GeneratedImage, ProviderName } from '../types.js';
 import { buildBundle } from './bundle.js';
+
+/** Providers supported by chat --all (excludes special-purpose providers). */
+const CHAT_PROVIDERS: ProviderName[] = ['chatgpt', 'gemini', 'claude', 'grok'];
 
 export interface ChatResult {
   sessionId: string;
@@ -148,6 +151,38 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
   } finally {
     await browser.close();
   }
+}
+
+export interface ChatAllResult {
+  provider: ProviderName;
+  result?: ChatResult;
+  error?: string;
+}
+
+/**
+ * Run the same prompt against multiple providers in parallel.
+ * Uses the shared browser daemon — all providers reuse one Chromium process.
+ */
+export async function runChatAll(options: ChatOptions): Promise<ChatAllResult[]> {
+  const targets = options.providers ?? CHAT_PROVIDERS;
+
+  console.log(chalk.bold.blue(`\n🚀 Sending to ${targets.length} providers in parallel...\n`));
+
+  const tasks = targets.map(async (provider): Promise<ChatAllResult> => {
+    try {
+      const result = await runChat({ ...options, provider });
+      return { provider, result };
+    } catch (error) {
+      return {
+        provider,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  return Promise.allSettled(tasks).then((settled) =>
+    settled.map((s) => (s.status === 'fulfilled' ? s.value : { provider: 'chatgpt', error: String(s.reason) })),
+  );
 }
 
 /**
