@@ -6,6 +6,8 @@ import type {
   ProviderConfig,
 } from '../types.js';
 
+import { fillAndSubmitPrompt } from './utils.js';
+
 export const CHATGPT_CONFIG: ProviderConfig = {
   name: 'chatgpt',
   displayName: 'ChatGPT',
@@ -108,36 +110,7 @@ export const chatgptActions: ProviderActions = {
   async submitPrompt(page: Page, prompt: string): Promise<void> {
     // Dismiss onboarding/welcome modals that block the composer
     await dismissOverlays(page);
-
-    const composer = page.locator(SELECTORS.composer).first();
-    await composer.waitFor({ state: 'visible', timeout: 15_000 });
-
-    await composer.click();
-    await page.keyboard.press('ControlOrMeta+a');
-    await page.keyboard.press('Backspace');
-
-    // Use evaluate for large text to avoid keyboard.type slowness
-    try {
-      await composer.fill(prompt);
-    } catch {
-      // contenteditable elements sometimes reject fill() — inject via JS
-      await page.evaluate(
-        ({ sel, text }) => {
-          const el = document.querySelector(sel);
-          if (el) {
-            (el as HTMLElement).innerText = text;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        },
-        { sel: SELECTORS.composer, text: prompt },
-      );
-    }
-
-    await page.waitForTimeout(300);
-
-    const sendButton = page.locator(SELECTORS.sendButton).first();
-    await sendButton.waitFor({ state: 'visible', timeout: 5_000 });
-    await sendButton.click();
+    await fillAndSubmitPrompt(page, SELECTORS, prompt);
   },
 
   async captureResponse(

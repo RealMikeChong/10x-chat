@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { buildBundle } from '../core/bundle.js';
-import { runChat, runChatAll } from '../core/index.js';
+import { type ChatAllResult, type ChatResult, runChat, runChatAll } from '../core/index.js';
 import { isValidProvider } from '../providers/index.js';
 import type { ProviderName } from '../types.js';
 
@@ -72,30 +72,7 @@ export function createChatCommand(): Command {
       if (options.all) {
         try {
           const results = await runChatAll(commonOpts);
-
-          console.log('\n');
-          console.log(chalk.bold.blue('═'.repeat(60)));
-          console.log(chalk.bold.blue('  RESPONSES'));
-          console.log(chalk.bold.blue('═'.repeat(60)));
-
-          for (const r of results) {
-            console.log('');
-            if (r.result) {
-              console.log(chalk.bold.green(`▶ ${r.provider.toUpperCase()}`));
-              console.log(DIVIDER);
-              console.log(r.result.response);
-              console.log(DIVIDER);
-              console.log(
-                chalk.dim(
-                  `  Session: ${r.result.sessionId}  |  ${Math.round(r.result.durationMs / 1000)}s${r.result.truncated ? '  ⚠ truncated' : ''}`,
-                ),
-              );
-            } else {
-              console.log(chalk.bold.red(`▶ ${r.provider.toUpperCase()} — FAILED`));
-              console.log(chalk.red(`  ${r.error}`));
-            }
-          }
-          console.log('');
+          renderChatAllResult(results);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.error(chalk.red(`Error: ${message}`));
@@ -111,27 +88,7 @@ export function createChatCommand(): Command {
           provider: provider as ProviderName | undefined,
         });
 
-        console.log('');
-        console.log(chalk.bold.green('--- Response ---\n'));
-        console.log(result.response);
-        console.log('');
-        if (result.images && result.images.length > 0) {
-          console.log(chalk.bold.green('\n--- Generated Images ---\n'));
-          for (const img of result.images) {
-            if (img.localPath) {
-              console.log(chalk.green(`  🖼 ${img.localPath}`));
-            } else {
-              console.log(chalk.dim(`  🔗 ${img.url?.slice(0, 100)}`));
-            }
-          }
-        }
-
-        console.log('');
-        console.log(chalk.dim(`Session: ${result.sessionId}`));
-        console.log(chalk.dim(`Duration: ${Math.round(result.durationMs / 1000)}s`));
-        if (result.truncated) {
-          console.log(chalk.yellow('⚠ Response may be truncated (timeout reached)'));
-        }
+        renderChatResult(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(chalk.red(`Error: ${message}`));
@@ -140,4 +97,54 @@ export function createChatCommand(): Command {
     });
 
   return cmd;
+}
+
+function renderChatAllResult(results: ChatAllResult[]): void {
+  console.log('\n');
+  console.log(chalk.bold.blue('═'.repeat(60)));
+  console.log(chalk.bold.blue('  RESPONSES'));
+  console.log(chalk.bold.blue('═'.repeat(60)));
+
+  for (const r of results) {
+    console.log('');
+    if (r.result) {
+      console.log(chalk.bold.green(`▶ ${r.provider.toUpperCase()}`));
+      console.log(DIVIDER);
+      console.log(r.result.response);
+      console.log(DIVIDER);
+      console.log(
+        chalk.dim(
+          `  Session: ${r.result.sessionId}  |  ${Math.round(r.result.durationMs / 1000)}s${r.result.truncated ? '  ⚠ truncated' : ''}`,
+        ),
+      );
+    } else {
+      console.log(chalk.bold.red(`▶ ${r.provider.toUpperCase()} — FAILED`));
+      console.log(chalk.red(`  ${r.error}`));
+    }
+  }
+  console.log('');
+}
+
+function renderChatResult(result: ChatResult): void {
+  console.log('');
+  console.log(chalk.bold.green('--- Response ---\n'));
+  console.log(result.response);
+  console.log('');
+  if (result.images && result.images.length > 0) {
+    console.log(chalk.bold.green('\n--- Generated Images ---\n'));
+    for (const img of result.images) {
+      if (img.localPath) {
+        console.log(chalk.green(`  🖼 ${img.localPath}`));
+      } else {
+        console.log(chalk.dim(`  🔗 ${img.url?.slice(0, 100)}`));
+      }
+    }
+  }
+
+  console.log('');
+  console.log(chalk.dim(`Session: ${result.sessionId}`));
+  console.log(chalk.dim(`Duration: ${Math.round(result.durationMs / 1000)}s`));
+  if (result.truncated) {
+    console.log(chalk.yellow('⚠ Response may be truncated (timeout reached)'));
+  }
 }
