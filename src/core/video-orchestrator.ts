@@ -362,7 +362,9 @@ async function downloadVideos(
       }
 
       if (!buf) {
-        console.warn(chalk.yellow(`  ⚠ Failed to download video ${i + 1} (src: ${src.slice(0, 80)})`));
+        console.warn(
+          chalk.yellow(`  ⚠ Failed to download video ${i + 1} (src: ${src.slice(0, 80)})`),
+        );
         results.push({});
         continue;
       }
@@ -386,4 +388,3 @@ async function downloadVideos(
 
   return results;
 }
-
