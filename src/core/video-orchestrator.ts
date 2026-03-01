@@ -89,17 +89,25 @@ export async function runVideo(options: VideoOptions): Promise<VideoResult> {
       if (await getStarted.isVisible({ timeout: 2000 }).catch(() => false)) {
         await getStarted.click({ force: true });
         console.log(chalk.dim('Dismissed onboarding modal'));
-        await page.waitForTimeout(2000);
+        // The modal dismiss often triggers a navigation — wait for the page
+        // to fully settle before doing any page.evaluate() calls.
+        await page.waitForLoadState('domcontentloaded').catch(() => {});
+        await page.waitForTimeout(3000);
       }
     };
 
     await dismissOverlays();
 
     // ── Handle marketing page → studio navigation ──
-    const isMarketingPage = await page.evaluate(() => {
-      const body = document.body.textContent ?? '';
-      return body.includes('Where the next wave') || body.includes('Scroll to Explore');
-    });
+    let isMarketingPage = false;
+    try {
+      isMarketingPage = await page.evaluate(() => {
+        const body = document.body.textContent ?? '';
+        return body.includes('Where the next wave') || body.includes('Scroll to Explore');
+      });
+    } catch {
+      // Context may have been destroyed by a recent navigation — assume not marketing page
+    }
 
     if (isMarketingPage) {
       console.log(chalk.dim('On marketing page, entering studio...'));
@@ -111,6 +119,7 @@ export async function runVideo(options: VideoOptions): Promise<VideoResult> {
           }
         }
       });
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
       await page.waitForTimeout(8000);
       await dismissOverlays();
     }
@@ -232,6 +241,7 @@ export async function runVideo(options: VideoOptions): Promise<VideoResult> {
 /**
  * Download generated videos from the browser.
  * Finds <video> elements, fetches their src blobs via the browser context, and saves locally.
+ * Handles both blob: URLs and regular HTTPS URLs.
  */
 async function downloadVideos(
   page: import('playwright').Page,
@@ -254,7 +264,23 @@ async function downloadVideos(
   });
 
   if (videoSources.length === 0) {
-    console.log(chalk.yellow('  No downloadable videos found.'));
+    console.log(chalk.yellow('  No downloadable videos found on page.'));
+
+    // Fallback: try to find download buttons and click them
+    const downloadBtns = await page.locator('a[download], button:has-text("Download")').count();
+    if (downloadBtns > 0) {
+      console.log(chalk.dim(`  Found ${downloadBtns} download button(s), attempting click...`));
+      const dlPromise = page.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+      await page.locator('a[download], button:has-text("Download")').first().click();
+      const download = await dlPromise;
+      if (download) {
+        const filePath = path.join(outputDir, download.suggestedFilename() || 'video_1.mp4');
+        await download.saveAs(filePath);
+        console.log(chalk.green(`  ✓ Saved: ${filePath}`));
+        return [{ localPath: filePath }];
+      }
+    }
+
     return [];
   }
 
@@ -263,35 +289,84 @@ async function downloadVideos(
   for (let i = 0; i < videoSources.length; i++) {
     const src = videoSources[i];
     try {
-      // Fetch video via browser context (handles auth cookies)
-      const dataUrl = await page.evaluate(async (videoUrl: string) => {
-        try {
-          const r = await fetch(videoUrl, { credentials: 'include' });
-          if (!r.ok) return null;
-          const blob = await r.blob();
+      let buf: Buffer | null = null;
+      let contentType = '';
+
+      if (src.startsWith('blob:')) {
+        // For blob: URLs, use XMLHttpRequest inside the browser context
+        const dataUrl = await page.evaluate(async (videoUrl: string) => {
           return new Promise<string | null>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', videoUrl, true);
+            xhr.responseType = 'blob';
+            xhr.onload = () => {
+              if (xhr.status === 200) {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(xhr.response);
+              } else {
+                resolve(null);
+              }
+            };
+            xhr.onerror = () => resolve(null);
+            xhr.send();
           });
-        } catch {
-          return null;
+        }, src);
+
+        if (dataUrl) {
+          const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            contentType = match[1];
+            buf = Buffer.from(match[2], 'base64');
+          }
         }
-      }, src);
+      } else {
+        // HTTPS URLs (including tRPC redirects) — fetch server-side with cookies
+        const context = page.context();
+        const cookies = await context.cookies([src]).catch(() => []);
+        const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 
-      if (!dataUrl) {
-        console.warn(chalk.yellow(`  ⚠ Failed to download video ${i + 1}`));
+        const resp = await fetch(src, {
+          headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+          redirect: 'follow',
+        }).catch(() => null);
+
+        if (resp?.ok) {
+          buf = Buffer.from(await resp.arrayBuffer());
+          contentType = resp.headers.get('content-type') ?? '';
+        } else {
+          // Fallback: try in-browser fetch
+          const dataUrl = await page.evaluate(async (videoUrl: string) => {
+            try {
+              const r = await fetch(videoUrl, { credentials: 'include', redirect: 'follow' });
+              if (!r.ok) return null;
+              const blob = await r.blob();
+              return new Promise<string | null>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+            } catch {
+              return null;
+            }
+          }, src);
+
+          if (dataUrl) {
+            const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+              contentType = match[1];
+              buf = Buffer.from(match[2], 'base64');
+            }
+          }
+        }
+      }
+
+      if (!buf) {
+        console.warn(chalk.yellow(`  ⚠ Failed to download video ${i + 1} (src: ${src.slice(0, 80)})`));
         results.push({});
         continue;
       }
 
-      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) {
-        results.push({});
-        continue;
-      }
-
-      const contentType = match[1];
       const ext = contentType.includes('mp4')
         ? 'mp4'
         : contentType.includes('webm')
@@ -300,7 +375,6 @@ async function downloadVideos(
       const filename = `video_${i + 1}.${ext}`;
       const filePath = path.join(outputDir, filename);
 
-      const buf = Buffer.from(match[2], 'base64');
       await writeFile(filePath, buf);
       console.log(chalk.green(`  ✓ Saved: ${filePath}`));
       results.push({ localPath: filePath });
@@ -312,3 +386,4 @@ async function downloadVideos(
 
   return results;
 }
+

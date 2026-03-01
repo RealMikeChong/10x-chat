@@ -107,11 +107,22 @@ export async function configureVideoMode(
   // All clicks inside the popup need { force: true } because Flow's
   // overlay/backdrop (<html>) intercepts pointer events.
 
-  // 1. Switch to Video tab
+  // 1. Switch to Video tab (Flow defaults to Image — this is critical)
   const videoTab = page.locator(FLOW_SELECTORS.videoTab).first();
-  if (await videoTab.isVisible().catch(() => false)) {
+  try {
+    await videoTab.waitFor({ state: 'visible', timeout: 5_000 });
     await videoTab.click({ force: true });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(800);
+  } catch {
+    // Popup may not have opened — retry
+    await openModelSelector(page);
+    const retry = page.locator(FLOW_SELECTORS.videoTab).first();
+    if (await retry.isVisible().catch(() => false)) {
+      await retry.click({ force: true });
+      await page.waitForTimeout(800);
+    } else {
+      console.warn('⚠ Could not find Video tab — generation may default to Image mode');
+    }
   }
 
   // 2. Select sub-mode (Ingredients or Frames)
