@@ -5,12 +5,14 @@ import { FLOW_CONFIG, flowActions } from './flow.js';
 import { GEMINI_CONFIG, geminiActions } from './gemini.js';
 import { GROK_CONFIG, grokActions } from './grok.js';
 import { NOTEBOOKLM_CONFIG, notebooklmActions } from './notebooklm.js';
+import { PERPLEXITY_CONFIG, perplexityActions } from './perplexity.js';
 
 const PROVIDERS: Record<ProviderName, Provider> = {
   chatgpt: { config: CHATGPT_CONFIG, actions: chatgptActions },
   gemini: { config: GEMINI_CONFIG, actions: geminiActions },
   claude: { config: CLAUDE_CONFIG, actions: claudeActions },
   grok: { config: GROK_CONFIG, actions: grokActions },
+  perplexity: { config: PERPLEXITY_CONFIG, actions: perplexityActions },
   notebooklm: { config: NOTEBOOKLM_CONFIG, actions: notebooklmActions },
   flow: { config: FLOW_CONFIG, actions: flowActions },
 };

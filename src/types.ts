@@ -12,7 +12,14 @@ export type ProfileMode = 'shared' | 'isolated';
 
 // ── Provider Types ──────────────────────────────────────────────
 
-export type ProviderName = 'chatgpt' | 'gemini' | 'claude' | 'grok' | 'notebooklm' | 'flow';
+export type ProviderName =
+  | 'chatgpt'
+  | 'gemini'
+  | 'claude'
+  | 'grok'
+  | 'perplexity'
+  | 'notebooklm'
+  | 'flow';
 
 export interface ProviderConfig {
   name: ProviderName;
