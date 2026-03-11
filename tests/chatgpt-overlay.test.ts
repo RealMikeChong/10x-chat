@@ -57,6 +57,7 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
       },
       evaluate: vi.fn(async () => {}),
       url: vi.fn(() => 'https://chatgpt.com'),
+      title: vi.fn(async () => 'ChatGPT'),
     },
     locatorCalls,
     clickedSelectors,
@@ -115,6 +116,7 @@ describe('ChatGPT Overlay Dismissal', () => {
       keyboard: { press: vi.fn() },
       evaluate: vi.fn(),
       url: vi.fn(() => 'https://chatgpt.com'),
+      title: vi.fn(async () => 'ChatGPT'),
     };
 
     const { chatgptActions } = await import('../src/providers/chatgpt.js');
