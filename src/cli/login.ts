@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { chromium } from 'playwright';
 import { acquireProfileLock, launchBrowser } from '../browser/index.js';
+import { resolveHeadlessMode } from '../browser/mode.js';
 import { saveStorageState } from '../browser/state.js';
 import { loadConfig } from '../config.js';
 import { getSharedProfileDir } from '../paths.js';
@@ -26,7 +27,7 @@ export function createLoginCommand(): Command {
         const profileMode: ProfileMode = options?.isolatedProfile ? 'isolated' : config.profileMode;
 
         if (options?.status) {
-          await checkLoginStatus(profileMode);
+          await checkLoginStatus(profileMode, config.headless);
           return;
         }
 
@@ -206,7 +207,10 @@ async function loginAllWithTabs(
   }
 }
 
-async function checkLoginStatus(profileMode: ProfileMode = 'shared'): Promise<void> {
+async function checkLoginStatus(
+  profileMode: ProfileMode = 'shared',
+  configHeadless = true,
+): Promise<void> {
   console.log(chalk.bold('Login Status\n'));
   if (profileMode === 'shared') {
     console.log(chalk.dim('(shared profile mode — all providers use the same browser profile)\n'));
@@ -217,7 +221,7 @@ async function checkLoginStatus(profileMode: ProfileMode = 'shared'): Promise<vo
     try {
       const browser = await launchBrowser({
         provider: name,
-        headless: true,
+        headless: resolveHeadlessMode(name, configHeadless),
         url: provider.config.url,
         profileMode,
       });

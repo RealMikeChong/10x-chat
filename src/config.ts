@@ -9,7 +9,8 @@ export async function loadConfig(): Promise<AppConfig> {
   try {
     const raw = await readFile(configPath, 'utf-8');
     // Dynamic import JSON5 only when needed
-    const JSON5 = await import('json5');
+    const JSON5Module = await import('json5');
+    const JSON5 = JSON5Module.default ?? JSON5Module;
     const parsed = JSON5.parse(raw) as Partial<AppConfig>;
     return { ...DEFAULT_CONFIG, ...parsed };
   } catch {
