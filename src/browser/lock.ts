@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isProcessAlive } from './process.js';
 
 const LOCK_FILENAME = '10x-chat.lock';
 
@@ -14,16 +15,6 @@ export interface ProfileLock {
   lockPath: string;
   lockId: string;
   release: () => Promise<void>;
-}
-
-/** Check if a process is still alive. */
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

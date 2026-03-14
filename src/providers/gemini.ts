@@ -6,7 +6,7 @@ import type {
   ProviderActions,
   ProviderConfig,
 } from '../types.js';
-import { fillAndSubmitPrompt } from './utils.js';
+import { submitPromptToComposer } from './submit.js';
 
 export const GEMINI_CONFIG: ProviderConfig = {
   name: 'gemini',
@@ -122,7 +122,10 @@ export const geminiActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
-    await fillAndSubmitPrompt(page, SELECTORS, prompt);
+    await submitPromptToComposer(page, prompt, {
+      composerSelector: SELECTORS.composer,
+      sendButtonSelector: SELECTORS.sendButton,
+    });
   },
 
   async captureResponse(

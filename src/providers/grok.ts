@@ -1,11 +1,12 @@
 import type { Page } from 'playwright';
+import { pollUntilStable } from '../core/polling.js';
 import type {
   CapturedResponse,
   GeneratedImage,
   ProviderActions,
   ProviderConfig,
 } from '../types.js';
-import { fillAndSubmitPrompt } from './utils.js';
+import { submitPromptToComposer } from './submit.js';
 
 export const GROK_CONFIG: ProviderConfig = {
   name: 'grok',
@@ -65,14 +66,11 @@ export const grokActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
-    await fillAndSubmitPrompt(
-      page,
-      {
-        composer: SELECTORS.composer,
-        sendButton: SELECTORS.sendButton,
-      },
-      prompt,
-    );
+    await submitPromptToComposer(page, prompt, {
+      composerSelector: SELECTORS.composer,
+      // Grok needs :not([disabled]) on send button
+      sendButtonSelector: `${SELECTORS.sendButton}:not([disabled])`,
+    });
   },
 
   async captureResponse(
@@ -98,41 +96,21 @@ export const grokActions: ProviderActions = {
       .waitFor({ timeout: timeoutMs - (Date.now() - startTime) });
 
     // Poll until the response stops changing (streaming complete)
-    let lastText = '';
-    let stableCount = 0;
-    const STABLE_THRESHOLD = 3;
-    const POLL_INTERVAL = 1000;
-
-    while (Date.now() - startTime < timeoutMs) {
-      const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-      const remainingMs = timeoutMs - (Date.now() - startTime);
-      const currentText = (await lastTurn.textContent({ timeout: remainingMs }))?.trim() ?? '';
-
-      const hasImages = await page.evaluate(
-        () =>
-          document.querySelectorAll('img[src*="assets.grok.com"][src*="/generated/"]').length > 0,
-      );
-
-      if (currentText === lastText) {
-        stableCount++;
-        if (stableCount >= STABLE_THRESHOLD && (currentText.length > 0 || hasImages)) {
-          break;
-        }
-      } else {
-        if (onChunk && currentText.length > lastText.length) {
-          onChunk(currentText.slice(lastText.length));
-        }
-        lastText = currentText;
-        stableCount = 0;
-      }
-
-      await page.waitForTimeout(POLL_INTERVAL);
-    }
+    const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const { text: lastText, truncated } = await pollUntilStable(page, {
+      getText: async (p) => {
+        const lastTurn = p.locator(SELECTORS.assistantTurn).last();
+        const remaining = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+        return (await lastTurn.textContent({ timeout: remaining }))?.trim() ?? '';
+      },
+      timeoutMs: remainingMs,
+      onChunk,
+    });
 
     // Extract the final HTML content
     const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-    const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-    const markdown = (await lastTurn.innerHTML({ timeout: remainingMs })) ?? '';
+    const finalRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const markdown = (await lastTurn.innerHTML({ timeout: finalRemainingMs })) ?? '';
 
     // Extract generated images (Grok/Aurora)
     const images: GeneratedImage[] = await page.evaluate(() => {
@@ -156,7 +134,6 @@ export const grokActions: ProviderActions = {
     });
 
     const elapsed = Date.now() - startTime;
-    const truncated = elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD;
 
     return {
       text: lastText,

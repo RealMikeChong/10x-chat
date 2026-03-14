@@ -28,8 +28,7 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
       selector.includes('textbox');
     const _isLogin = selector.includes('Log in') || selector.includes('Sign up');
 
-    const visible =
-      hasOnboardingModal && isOverlay ? true : hasComposer && isComposer ? true : false;
+    const visible = hasOnboardingModal && isOverlay ? true : !!(hasComposer && isComposer);
 
     const locator = {
       first: () => locator,
@@ -58,6 +57,7 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
       },
       evaluate: vi.fn(async () => {}),
       url: vi.fn(() => 'https://chatgpt.com'),
+      title: vi.fn(async () => 'ChatGPT'),
     },
     locatorCalls,
     clickedSelectors,
@@ -116,6 +116,7 @@ describe('ChatGPT Overlay Dismissal', () => {
       keyboard: { press: vi.fn() },
       evaluate: vi.fn(),
       url: vi.fn(() => 'https://chatgpt.com'),
+      title: vi.fn(async () => 'ChatGPT'),
     };
 
     const { chatgptActions } = await import('../src/providers/chatgpt.js');

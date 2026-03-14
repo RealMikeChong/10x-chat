@@ -1,12 +1,12 @@
 import type { Page } from 'playwright';
+import { pollUntilStable } from '../core/polling.js';
 import type {
   CapturedResponse,
   GeneratedImage,
   ProviderActions,
   ProviderConfig,
 } from '../types.js';
-
-import { fillAndSubmitPrompt } from './utils.js';
+import { submitPromptToComposer } from './submit.js';
 
 export const CHATGPT_CONFIG: ProviderConfig = {
   name: 'chatgpt',
@@ -16,6 +16,9 @@ export const CHATGPT_CONFIG: ProviderConfig = {
   models: ['GPT-4o', 'GPT-4o mini', 'GPT-4.5', 'o1', 'o3-mini'],
   defaultModel: 'GPT-4o',
   defaultTimeoutMs: 5 * 60 * 1000,
+  // ChatGPT's Cloudflare bot-protection blocks headless Playwright permanently.
+  // The chat orchestrator will automatically force headed mode for this provider.
+  headlessBlocked: true,
 };
 
 const SELECTORS = {
@@ -67,8 +70,46 @@ async function dismissOverlays(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Detect Cloudflare bot-protection challenge pages.
+ * Returns true when the current page is the "Just a moment..." challenge.
+ */
+async function isCloudflareChallenge(page: Page): Promise<boolean> {
+  const title = await page.title().catch(() => '');
+  if (title === 'Just a moment...' || title.toLowerCase().includes('checking your browser')) {
+    return true;
+  }
+  // Also check for the Cloudflare challenge iframe/form
+  const cfElement = await page
+    .locator('#challenge-running, #challenge-form, .cf-browser-verification')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  return cfElement;
+}
+
+/** Sentinel error class so the orchestrator can distinguish CF blocks from other failures. */
+export class CloudflareBlockedError extends Error {
+  constructor() {
+    super(
+      'Cloudflare bot-protection is blocking the browser.\n' +
+        'ChatGPT requires a visible browser window — run with the --headed flag:\n' +
+        '  10x-chat chat --provider chatgpt --headed -p "your prompt"',
+    );
+    this.name = 'CloudflareBlockedError';
+  }
+}
+
 export const chatgptActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
+    // Detect Cloudflare challenge before anything else.
+    // This happens when running headless — Cloudflare blocks non-human browsers.
+    // The orchestrator should have already forced headed mode via headlessBlocked,
+    // but throw a clear error here as a safety net.
+    if (await isCloudflareChallenge(page)) {
+      throw new CloudflareBlockedError();
+    }
+
     try {
       // Wait for either composer or login indicators to appear
       await page
@@ -76,6 +117,11 @@ export const chatgptActions: ProviderActions = {
         .first()
         .waitFor({ state: 'visible', timeout: 8_000 })
         .catch(() => {});
+
+      // Re-check for Cloudflare after the wait (page may have navigated)
+      if (await isCloudflareChallenge(page)) {
+        throw new CloudflareBlockedError();
+      }
 
       // Dismiss any overlays that might be hiding the composer
       await dismissOverlays(page);
@@ -95,7 +141,9 @@ export const chatgptActions: ProviderActions = {
       if (loginVisible) return false;
 
       return false;
-    } catch {
+    } catch (err) {
+      // Re-throw Cloudflare errors so the orchestrator can surface them
+      if (err instanceof CloudflareBlockedError) throw err;
       return false;
     }
   },
@@ -110,7 +158,11 @@ export const chatgptActions: ProviderActions = {
   async submitPrompt(page: Page, prompt: string): Promise<void> {
     // Dismiss onboarding/welcome modals that block the composer
     await dismissOverlays(page);
-    await fillAndSubmitPrompt(page, SELECTORS, prompt);
+
+    await submitPromptToComposer(page, prompt, {
+      composerSelector: SELECTORS.composer,
+      sendButtonSelector: SELECTORS.sendButton,
+    });
   },
 
   async captureResponse(
@@ -145,43 +197,22 @@ export const chatgptActions: ProviderActions = {
     await waitForNewTurn();
 
     // Phase 2: Poll until the response stops changing and streaming is complete
-    let lastText = '';
-    let stableCount = 0;
-    const STABLE_THRESHOLD = 3;
-    const POLL_INTERVAL = 1000;
-
-    while (Date.now() - startTime < timeoutMs) {
-      // If stop button is visible, streaming is still in progress — reset stability
-      const isStreaming = await page
-        .locator(SELECTORS.stopButton)
-        .first()
-        .isVisible()
-        .catch(() => false);
-
-      const lastTurn = page.locator(SELECTORS.assistantTurn).last();
-      const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-      const currentText = (await lastTurn.textContent({ timeout: remainingMs }))?.trim() ?? '';
-
-      // For image-generation responses, check if images are present
-      const hasImages = await page.evaluate(
-        () => document.querySelectorAll('img[alt="Generated image"]').length > 0,
-      );
-
-      if (currentText === lastText && !isStreaming) {
-        stableCount++;
-        if (stableCount >= STABLE_THRESHOLD && (currentText.length > 0 || hasImages)) {
-          break;
-        }
-      } else {
-        if (onChunk && currentText.length > lastText.length) {
-          onChunk(currentText.slice(lastText.length));
-        }
-        lastText = currentText;
-        stableCount = 0;
-      }
-
-      await page.waitForTimeout(POLL_INTERVAL);
-    }
+    const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const { text: lastText, truncated } = await pollUntilStable(page, {
+      getText: async (p) => {
+        const lastTurn = p.locator(SELECTORS.assistantTurn).last();
+        const remaining = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+        return (await lastTurn.textContent({ timeout: remaining }))?.trim() ?? '';
+      },
+      timeoutMs: remainingMs,
+      onChunk,
+      isStreaming: async (p) =>
+        p
+          .locator(SELECTORS.stopButton)
+          .first()
+          .isVisible()
+          .catch(() => false),
+    });
 
     // Extract the final HTML content
     const lastTurn = page.locator(SELECTORS.assistantTurn).last();
@@ -210,7 +241,6 @@ export const chatgptActions: ProviderActions = {
     });
 
     const elapsed = Date.now() - startTime;
-    const truncated = elapsed >= timeoutMs && stableCount < STABLE_THRESHOLD;
 
     return {
       text: lastText,

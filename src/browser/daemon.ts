@@ -15,14 +15,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { type Browser, chromium } from 'playwright';
 import { getAppDir } from '../paths.js';
+import { CHROMIUM_ARGS, isProcessAlive } from './process.js';
 
 const DAEMON_FILE = 'browser-daemon.json';
-
-const CHROMIUM_ARGS = [
-  '--disable-blink-features=AutomationControlled',
-  '--no-first-run',
-  '--no-default-browser-check',
-];
 
 export interface DaemonState {
   /** PID of the Chromium server process. */
@@ -35,15 +30,6 @@ export interface DaemonState {
 
 export function getDaemonStatePath(): string {
   return path.join(getAppDir(), DAEMON_FILE);
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function readDaemonState(): Promise<DaemonState | null> {

@@ -8,9 +8,10 @@ describe('Provider Registry', () => {
     expect(providers).toContain('gemini');
     expect(providers).toContain('claude');
     expect(providers).toContain('grok');
+    expect(providers).toContain('perplexity');
     expect(providers).toContain('notebooklm');
     expect(providers).toContain('flow');
-    expect(providers).toHaveLength(6);
+    expect(providers).toHaveLength(7);
   });
 
   it('should get a provider by name', () => {
@@ -41,6 +42,7 @@ describe('Provider Registry', () => {
     expect(isValidProvider('gemini')).toBe(true);
     expect(isValidProvider('claude')).toBe(true);
     expect(isValidProvider('grok')).toBe(true);
+    expect(isValidProvider('perplexity')).toBe(true);
     expect(isValidProvider('notebooklm')).toBe(true);
     expect(isValidProvider('flow')).toBe(true);
     expect(isValidProvider('unknown')).toBe(false);

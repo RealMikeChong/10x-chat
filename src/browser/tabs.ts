@@ -15,20 +15,12 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getAppDir } from '../paths.js';
+import { isProcessAlive } from './process.js';
 
 const TABS_DIR = 'browser-tabs';
 
 function getTabsDir(): string {
   return path.join(getAppDir(), TABS_DIR);
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Register a new tab. Returns a tabKey to pass to unregisterTab(). */

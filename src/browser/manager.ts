@@ -4,6 +4,7 @@ import { getIsolatedProfileDir, getSharedProfileDir } from '../paths.js';
 import type { ProfileMode, ProviderName } from '../types.js';
 import { getOrLaunchBrowserDaemon, stopDaemon } from './daemon.js';
 import { acquireProfileLock, type ProfileLock } from './lock.js';
+import { CHROMIUM_ARGS } from './process.js';
 import { loadStorageState, saveStorageState } from './state.js';
 import { registerTab, unregisterTab } from './tabs.js';
 
@@ -38,13 +39,6 @@ export interface LaunchOptions {
    */
   persistent?: boolean;
 }
-
-/** Chromium launch args shared by persistent/isolated modes. */
-const CHROMIUM_ARGS = [
-  '--disable-blink-features=AutomationControlled',
-  '--no-first-run',
-  '--no-default-browser-check',
-];
 
 /**
  * Launch a browser session for a provider.

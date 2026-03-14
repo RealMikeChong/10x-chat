@@ -12,7 +12,14 @@ export type ProfileMode = 'shared' | 'isolated';
 
 // ── Provider Types ──────────────────────────────────────────────
 
-export type ProviderName = 'chatgpt' | 'gemini' | 'claude' | 'grok' | 'notebooklm' | 'flow';
+export type ProviderName =
+  | 'chatgpt'
+  | 'gemini'
+  | 'claude'
+  | 'grok'
+  | 'perplexity'
+  | 'notebooklm'
+  | 'flow';
 
 export interface ProviderConfig {
   name: ProviderName;
@@ -22,6 +29,12 @@ export interface ProviderConfig {
   models?: string[];
   defaultModel?: string;
   defaultTimeoutMs: number;
+  /**
+   * If true, the provider's site uses bot-detection (e.g. Cloudflare) that
+   * permanently blocks headless Chromium. Chat sessions will automatically
+   * run in headed (visible browser) mode for this provider.
+   */
+  headlessBlocked?: boolean;
 }
 
 export interface GeneratedImage {

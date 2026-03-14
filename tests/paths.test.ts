@@ -5,7 +5,6 @@ import {
   getAppDir,
   getConfigPath,
   getIsolatedProfileDir,
-  getProfileDir,
   getSessionDir,
   getSessionsDir,
   getSharedProfileDir,
@@ -32,9 +31,9 @@ describe('Paths', () => {
     expect(getAppDir()).toBe('/custom/path');
   });
 
-  it('should return profile dir for a provider', () => {
+  it('should return isolated profile dir for a provider (backward-compat)', () => {
     delete process.env.TEN_X_CHAT_HOME;
-    expect(getProfileDir('chatgpt')).toBe(
+    expect(getIsolatedProfileDir('chatgpt')).toBe(
       path.join(os.homedir(), '.10x-chat', 'profiles', 'chatgpt'),
     );
   });
@@ -66,10 +65,5 @@ describe('Paths', () => {
     expect(getIsolatedProfileDir('gemini')).toBe(
       path.join(os.homedir(), '.10x-chat', 'profiles', 'gemini'),
     );
-  });
-
-  it('should have getProfileDir as backward-compat alias for getIsolatedProfileDir', () => {
-    delete process.env.TEN_X_CHAT_HOME;
-    expect(getProfileDir('claude')).toBe(getIsolatedProfileDir('claude'));
   });
 });
