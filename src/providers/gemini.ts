@@ -23,7 +23,93 @@ const SELECTORS = {
   sendButton: 'button.send-button, button[aria-label="Send message"]',
   /** model-response is the Angular custom element wrapping each AI turn */
   responseTurn: 'model-response .model-response-text, model-response message-content',
+  /** Indicators that Gemini is still generating (text streaming or image generation in flight) */
+  streamingIndicators: [
+    // Stop/cancel button visible while generating
+    'button[aria-label="Stop generating"], button[aria-label="Cancel"]',
+    // Imagen / Nano Banana loading spinner or status
+    '.image-generation-loading',
+    '.loading-indicator',
+    // "Generating image" / "Loading Nano Banana" text shown during image gen
+    'model-response [class*="loading"]',
+    'model-response [class*="progress"]',
+  ].join(', '),
+  /** Generated images in the response (Imagen / Nano Banana) */
+  generatedImages: [
+    'img.image.loaded',
+    'img[alt*="AI generated"]',
+    'img[alt*="Generated"]',
+    // Imagen result containers
+    'model-response img[src*="lh3.googleusercontent.com"]',
+    'model-response img[src*="encrypted"]',
+  ].join(', '),
 } as const;
+
+/**
+ * Wait for Gemini image generation to complete.
+ * After text stabilizes, check if image generation is in progress and
+ * wait for images to appear and fully load (naturalWidth > 0).
+ */
+async function waitForImages(page: Page, timeoutMs: number): Promise<void> {
+  const startTime = Date.now();
+  const pollInterval = 2_000;
+
+  // First, check if there are any signs of image generation in the last response
+  const lastTurnHtml = await page
+    .locator(SELECTORS.responseTurn)
+    .last()
+    .innerHTML()
+    .catch(() => '');
+  const lowerHtml = lastTurnHtml.toLowerCase();
+  const hasImageGenHints =
+    lowerHtml.includes('nano banana') ||
+    lowerHtml.includes('imagen') ||
+    lowerHtml.includes('image-generation') ||
+    lowerHtml.includes('generating') ||
+    lowerHtml.includes('img');
+
+  if (!hasImageGenHints) return;
+
+  // Wait for loading indicators to disappear and images to be fully loaded
+  while (Date.now() - startTime < timeoutMs) {
+    // Check if any loading indicators are still visible
+    const stillLoading = await page
+      .locator(SELECTORS.streamingIndicators)
+      .first()
+      .isVisible()
+      .catch(() => false);
+
+    if (stillLoading) {
+      await page.waitForTimeout(pollInterval);
+      continue;
+    }
+
+    // Check if images exist and are fully loaded
+    const imageState = await page.evaluate((imgSelector: string) => {
+      const imgs = Array.from(document.querySelectorAll(imgSelector));
+      if (imgs.length === 0) return { count: 0, allLoaded: true };
+      const allLoaded = imgs.every((img) => {
+        const el = img as HTMLImageElement;
+        return el.complete && el.naturalWidth > 0;
+      });
+      return { count: imgs.length, allLoaded };
+    }, SELECTORS.generatedImages);
+
+    if (imageState.count > 0 && imageState.allLoaded) {
+      // Images are present and fully loaded
+      return;
+    }
+
+    if (imageState.count > 0 && !imageState.allLoaded) {
+      // Images exist but not yet loaded — keep waiting
+      await page.waitForTimeout(pollInterval);
+      continue;
+    }
+
+    // No loading indicators and no images — likely a text-only response
+    break;
+  }
+}
 
 export const geminiActions: ProviderActions = {
   async isLoggedIn(page: Page): Promise<boolean> {
@@ -149,32 +235,63 @@ export const geminiActions: ProviderActions = {
         (await p.locator(SELECTORS.responseTurn).last().textContent())?.trim() ?? '',
       timeoutMs: remainingMs,
       onChunk,
+      isStreaming: async (p) => {
+        // Check if Gemini is still generating (text or images)
+        const indicatorVisible = await p
+          .locator(SELECTORS.streamingIndicators)
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (indicatorVisible) return true;
+
+        // Also check for image-generation-specific text in the response
+        // (e.g. "Loading Nano Banana", "Generating image", "Creating image")
+        const lastTurnText =
+          (await p.locator(SELECTORS.responseTurn).last().textContent())?.toLowerCase() ?? '';
+        if (
+          lastTurnText.includes('loading nano banana') ||
+          lastTurnText.includes('generating image') ||
+          lastTurnText.includes('creating image') ||
+          lastTurnText.includes('loading imagen')
+        ) {
+          return true;
+        }
+
+        return false;
+      },
     });
+
+    // Post-poll: wait for images to finish loading if image generation was triggered.
+    // Gemini image gen can take 10-30s after the text portion stabilizes.
+    const postPollRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    await waitForImages(page, postPollRemainingMs);
 
     const lastTurn = page.locator(SELECTORS.responseTurn).last();
     const markdown = (await lastTurn.innerHTML()) ?? '';
 
-    // Extract generated images (Imagen)
-    const images: GeneratedImage[] = await page.evaluate(() => {
+    // Extract generated images (Imagen / Nano Banana)
+    const images: GeneratedImage[] = await page.evaluate((imgSelector: string) => {
       const seen = new Set<string>();
       const results: { url: string; alt: string; width: number; height: number }[] = [];
-      const imgs = Array.from(
-        document.querySelectorAll('img.image.loaded, img[alt*="AI generated"]'),
-      );
+      const imgs = Array.from(document.querySelectorAll(imgSelector));
       for (const img of imgs) {
         const src = img.getAttribute('src') ?? '';
         if (!src || seen.has(src)) continue;
+        // Skip tiny icons/avatars (likely UI elements, not generated images)
+        const w = (img as HTMLImageElement).naturalWidth;
+        const h = (img as HTMLImageElement).naturalHeight;
+        if (w > 0 && w < 64 && h > 0 && h < 64) continue;
         seen.add(src);
         const fullSizeUrl = src.includes('=s') ? src : `${src}=s1024-rj`;
         results.push({
           url: fullSizeUrl,
           alt: img.getAttribute('alt') ?? '',
-          width: (img as HTMLImageElement).naturalWidth,
-          height: (img as HTMLImageElement).naturalHeight,
+          width: w,
+          height: h,
         });
       }
       return results;
-    });
+    }, SELECTORS.generatedImages);
 
     const totalElapsed = Date.now() - startTime;
     return {
