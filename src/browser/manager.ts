@@ -124,13 +124,11 @@ async function launchSharedBrowser(opts: LaunchOptions): Promise<BrowserSession>
       // already closed
     }
 
-    // Unregister tab and check if we're the last one
-    const remaining = await unregisterTab(tabKey);
-    if (remaining === 0) {
-      // Last tab — stop the browser daemon entirely
-      await stopDaemon();
-    }
-    // else: other tabs still open — leave daemon running
+    // Unregister tab and stop daemon — for single-shot CLI commands the
+    // browser should not linger after the task completes. This also handles
+    // stale tab files from crashed processes (unregisterTab cleans them).
+    await unregisterTab(tabKey);
+    await stopDaemon();
   };
 
   return { context, page, lock: null, close };

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { stopDaemon } from '../browser/daemon.js';
 import { createChatCommand } from '../cli/chat.js';
 import { createConfigCommand } from '../cli/config.js';
 import { createLoginCommand } from '../cli/login.js';
@@ -13,6 +14,20 @@ import { createNotebookLMCommand } from '../cli/notebooklm.js';
 import { createSkillCommand } from '../cli/skill.js';
 import { createSessionCommand, createStatusCommand } from '../cli/status.js';
 import { createVideoCommand } from '../cli/video.js';
+
+// Ensure the browser daemon is stopped on unexpected exit (Ctrl+C, crash, etc.)
+// so Chrome for Testing doesn't linger in the dock after the CLI finishes.
+const cleanupAndExit = (code: number) => {
+  stopDaemon()
+    .catch(() => {})
+    .finally(() => process.exit(code));
+};
+process.on('SIGINT', () => cleanupAndExit(130));
+process.on('SIGTERM', () => cleanupAndExit(143));
+process.on('uncaughtException', (err) => {
+  console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+  cleanupAndExit(1);
+});
 
 // Read version from package.json at runtime (works for both src and dist)
 const __dirname = dirname(fileURLToPath(import.meta.url));
