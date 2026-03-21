@@ -46,11 +46,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/RealMikeChong/10x-chat.git"
+    "url": "https://github.com/MikeChongCan/10x-chat.git"
   },
-  "homepage": "https://github.com/RealMikeChong/10x-chat#readme",
+  "homepage": "https://github.com/MikeChongCan/10x-chat#readme",
   "bugs": {
-    "url": "https://github.com/RealMikeChong/10x-chat/issues"
+    "url": "https://github.com/MikeChongCan/10x-chat/issues"
   },
   "publishConfig": {
     "access": "public"

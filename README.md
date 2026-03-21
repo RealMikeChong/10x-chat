@@ -11,7 +11,7 @@
 Paste this into your [OpenClaw](https://openclaw.ai) chat to install as a skill:
 
 ```
-https://raw.githubusercontent.com/RealMikeChong/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
+https://raw.githubusercontent.com/MikeChongCan/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
 ```
 
 ## Quick Start

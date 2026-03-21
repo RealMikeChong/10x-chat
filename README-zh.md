@@ -11,7 +11,7 @@
 將以下連結貼到 [OpenClaw](https://openclaw.ai) 聊天中即可安裝為技能：
 
 ```
-https://raw.githubusercontent.com/RealMikeChong/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
+https://raw.githubusercontent.com/MikeChongCan/10x-chat/refs/heads/main/skills/10x-chat/SKILL.md
 ```
 
 ## 贊助商（其實我自己哈）廣告：
