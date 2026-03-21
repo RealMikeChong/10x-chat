@@ -226,9 +226,7 @@ export const chatgptActions: ProviderActions = {
       const seen = new Set<string>();
       const results: { url: string; alt: string; width: number; height: number }[] = [];
       const imgs = Array.from(
-        document.querySelectorAll(
-          'img[alt^="Generated image"], img[src*="estuary/content"]',
-        ),
+        document.querySelectorAll('img[alt^="Generated image"], img[src*="estuary/content"]'),
       );
       for (const img of imgs) {
         const src = img.getAttribute('src') ?? '';

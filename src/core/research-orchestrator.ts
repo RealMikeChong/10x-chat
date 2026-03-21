@@ -112,10 +112,11 @@ const chatgptResearch: ResearchProviderConfig = {
         if (!main) return '';
         const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
         const texts: string[] = [];
-        let node: Text | null;
-        while ((node = walker.nextNode() as Text)) {
+        let node = walker.nextNode() as Text | null;
+        while (node) {
           const t = node.textContent?.trim();
           if (t && t.length > 20 && !t.startsWith('window.')) texts.push(t);
+          node = walker.nextNode() as Text | null;
         }
         return texts.join(' ').slice(0, 300);
       });
@@ -161,7 +162,9 @@ const chatgptResearch: ResearchProviderConfig = {
     // Wait briefly for /c/<id> navigation if needed
     const url = page.url();
     if (url.includes('/deep-research')) {
-      await page.waitForURL((u) => u.pathname.startsWith('/c/'), { timeout: 30_000 }).catch(() => {});
+      await page
+        .waitForURL((u) => u.pathname.startsWith('/c/'), { timeout: 30_000 })
+        .catch(() => {});
       await page.waitForTimeout(5_000);
     }
 
@@ -345,7 +348,7 @@ export async function runResearch(options: ResearchOptions): Promise<ResearchRes
       } else if (researching) {
         // Still researching — log periodic heartbeat
         const elapsed = Math.round((Date.now() - startTime) / 1000);
-        if (elapsed % 30 < (pollIntervalMs / 1000)) {
+        if (elapsed % 30 < pollIntervalMs / 1000) {
           console.log(chalk.dim(`  [${elapsed}s] Still researching...`));
         }
         stableCount = 0;

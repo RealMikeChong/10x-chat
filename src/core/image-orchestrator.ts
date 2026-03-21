@@ -43,9 +43,7 @@ const chatgptImageGen: ImageGenProviderConfig = {
       // DALL-E / GPT-Image: alt starts with "Generated image" and src uses
       // backend-api/estuary/content with file IDs
       const imgs = Array.from(
-        document.querySelectorAll(
-          'img[alt^="Generated image"], img[src*="estuary/content"]',
-        ),
+        document.querySelectorAll('img[alt^="Generated image"], img[src*="estuary/content"]'),
       );
       for (const img of imgs) {
         const src = img.getAttribute('src') ?? '';
