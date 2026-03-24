@@ -14,10 +14,10 @@ export {
   AuthError,
   ClientError,
   NetworkError,
+  RateLimitError,
   RPCError,
   RPCErrorCode,
   RPCTimeoutError,
-  RateLimitError,
   ServerError,
 };
 

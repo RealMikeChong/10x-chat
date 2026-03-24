@@ -1,8 +1,4 @@
-import {
-  readLiveTabCount,
-  registerDaemonTab,
-  unregisterDaemonTab,
-} from './daemon.js';
+import { readLiveTabCount, registerDaemonTab, unregisterDaemonTab } from './daemon.js';
 
 /**
  * Shared browser tab ref-counting is handled by the HTTP daemon.

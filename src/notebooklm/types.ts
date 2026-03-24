@@ -41,17 +41,10 @@ export {
   ArtifactNotFoundError,
   ArtifactNotReadyError,
   ArtifactParseError,
-  SourceAddError,
-  SourceError,
-  SourceNotFoundError,
-  SourceProcessingError,
-  SourceTimeoutError,
-};
-
-export {
   ArtifactStatus,
   AudioFormat,
   AudioLength,
+  artifactStatusToStr,
   ChatGoal,
   ChatResponseLength,
   DriveMimeType,
@@ -66,11 +59,15 @@ export {
   ShareViewLevel,
   SlideDeckFormat,
   SlideDeckLength,
+  SourceAddError,
+  SourceError,
+  SourceNotFoundError,
+  SourceProcessingError,
   SourceStatus,
+  SourceTimeoutError,
+  sourceStatusToStr,
   VideoFormat,
   VideoStyle,
-  artifactStatusToStr,
-  sourceStatusToStr,
 };
 
 export class UnknownTypeWarning extends Error {
