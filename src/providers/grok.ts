@@ -30,29 +30,25 @@ const SELECTORS = {
   loginPage:
     'a[href*="x.com/i/flow/login"], a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("Log in")',
   fileInput: 'input[type="file"][name="files"]',
-  thinkToggle: 'button[aria-pressed][aria-label*="Think" i], button:has-text("Think")',
+  thinkToggle: 'button[aria-pressed][aria-label*="Think"]',
   deepSearchToggle:
-    'button[aria-pressed][aria-label*="DeepSearch" i], button[aria-pressed][aria-label*="Deep Search" i], button:has-text("DeepSearch"), button:has-text("Deep Search")',
+    'button[aria-pressed][aria-label*="DeepSearch"], button[aria-pressed][aria-label*="Deep Search"]',
 } as const;
 
-async function getVisibleToggle(page: Page, selector: string) {
-  const candidates = page.locator(selector);
-  const count = await candidates.count();
-  for (let index = 0; index < count; index++) {
-    const candidate = candidates.nth(index);
-    if (await candidate.isVisible().catch(() => false)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-async function isToggleActive(
-  toggle: Awaited<ReturnType<typeof getVisibleToggle>>,
-): Promise<boolean> {
-  if (!toggle) return false;
-  return toggle
-    .evaluate((element) => {
+async function getToggleState(
+  page: Page,
+  selector: string,
+): Promise<{ found: boolean; active: boolean }> {
+  return page.evaluate((toggleSelector: string) => {
+    const isVisible = (element: Element | null): element is HTMLElement => {
+      if (!(element instanceof HTMLElement)) return false;
+      if (element.hidden) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const isActive = (element: HTMLElement) => {
       const ariaPressed = element.getAttribute('aria-pressed');
       const dataState = element.getAttribute('data-state');
       const classes = element.className.toLowerCase();
@@ -62,51 +58,90 @@ async function isToggleActive(
         classes.includes('active') ||
         classes.includes('selected')
       );
-    })
-    .catch(() => false);
+    };
+
+    const toggle = Array.from(document.querySelectorAll(toggleSelector)).find(isVisible);
+    if (!(toggle instanceof HTMLElement)) {
+      return { found: false, active: false };
+    }
+
+    return { found: true, active: isActive(toggle) };
+  }, selector);
 }
 
-async function setToggleState(
-  toggle: Awaited<ReturnType<typeof getVisibleToggle>>,
-  enabled: boolean,
-): Promise<void> {
-  if (!toggle) return;
-  const active = await isToggleActive(toggle);
-  if (active === enabled) return;
-  await toggle.click({ force: true });
+async function setToggleState(page: Page, selector: string, enabled: boolean): Promise<boolean> {
+  return page.evaluate(
+    ({ toggleSelector, enabledState }) => {
+      const isVisible = (element: Element | null): element is HTMLElement => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const isActive = (element: HTMLElement) => {
+        const ariaPressed = element.getAttribute('aria-pressed');
+        const dataState = element.getAttribute('data-state');
+        const classes = element.className.toLowerCase();
+        return (
+          ariaPressed === 'true' ||
+          dataState === 'on' ||
+          classes.includes('active') ||
+          classes.includes('selected')
+        );
+      };
+
+      const toggle = Array.from(document.querySelectorAll(toggleSelector)).find(isVisible);
+      if (!(toggle instanceof HTMLElement)) {
+        return false;
+      }
+
+      if (isActive(toggle) !== enabledState) {
+        toggle.click();
+      }
+
+      return true;
+    },
+    { toggleSelector: selector, enabledState: enabled },
+  );
 }
 
 export const grokActions: ProviderActions = {
   async selectModel(page: Page, model: string): Promise<void> {
-    const thinkToggle = await getVisibleToggle(page, SELECTORS.thinkToggle);
-    const deepSearchToggle = await getVisibleToggle(page, SELECTORS.deepSearchToggle);
+    const thinkToggle = await getToggleState(page, SELECTORS.thinkToggle);
+    const deepSearchToggle = await getToggleState(page, SELECTORS.deepSearchToggle);
 
     if (model === 'grok-3-think') {
-      if (!thinkToggle) {
+      if (!thinkToggle.found) {
         console.warn('Grok Think toggle not found — skipping model selection for "grok-3-think"');
         return;
       }
-      await setToggleState(deepSearchToggle, false);
-      await setToggleState(thinkToggle, true);
+      await setToggleState(page, SELECTORS.deepSearchToggle, false);
+      if (!thinkToggle.active) {
+        await setToggleState(page, SELECTORS.thinkToggle, true);
+      }
       await page.waitForTimeout(500);
       return;
     }
 
     if (model === 'grok-3-deepsearch') {
-      if (!deepSearchToggle) {
+      if (!deepSearchToggle.found) {
         console.warn(
           'Grok DeepSearch toggle not found — skipping model selection for "grok-3-deepsearch"',
         );
         return;
       }
-      await setToggleState(thinkToggle, false);
-      await setToggleState(deepSearchToggle, true);
+      await setToggleState(page, SELECTORS.thinkToggle, false);
+      if (!deepSearchToggle.active) {
+        await setToggleState(page, SELECTORS.deepSearchToggle, true);
+      }
       await page.waitForTimeout(500);
       return;
     }
 
-    await setToggleState(thinkToggle, false);
-    await setToggleState(deepSearchToggle, false);
+    await setToggleState(page, SELECTORS.thinkToggle, false);
+    await setToggleState(page, SELECTORS.deepSearchToggle, false);
     await page.waitForTimeout(500);
   },
 

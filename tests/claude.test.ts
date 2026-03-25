@@ -26,7 +26,7 @@ function createCapturePage(opts: { textSequence: string[]; html?: string }) {
   const page = {
     locator: vi.fn(() => lastLocator),
     waitForTimeout: vi.fn(async () => {}),
-    evaluate: vi.fn(async (fn: unknown, _arg?: unknown) => {
+    evaluate: vi.fn(async (_fn: unknown, _arg?: unknown) => {
       // If called with a string arg (selector), it's the getText evaluate
       if (typeof _arg === 'string') {
         const text = textSequence[Math.min(evalCallCount, textSequence.length - 1)] ?? '';

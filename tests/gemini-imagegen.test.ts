@@ -146,15 +146,15 @@ describe('Gemini captureResponse — image generation', () => {
       images: imageData,
     });
 
-    const result = await geminiActions.captureResponse(page as any, {
+    const result = await geminiActions.captureResponse(page as never, {
       timeoutMs: 5_000,
       onChunk: () => {},
     });
 
     expect(result.text).toBe('Here is your generated image');
-    expect(result.images).toBeDefined();
-    expect(result.images!.length).toBe(1);
-    expect(result.images![0].url).toContain('lh3.googleusercontent.com');
+    const generatedImages = result.images ?? [];
+    expect(generatedImages.length).toBe(1);
+    expect(generatedImages[0]?.url).toContain('lh3.googleusercontent.com');
 
     vi.restoreAllMocks();
   });
@@ -166,7 +166,7 @@ describe('Gemini captureResponse — image generation', () => {
       images: [],
     });
 
-    const result = await geminiActions.captureResponse(page as any, {
+    const result = await geminiActions.captureResponse(page as never, {
       timeoutMs: 5_000,
       onChunk: () => {},
     });
@@ -183,7 +183,7 @@ describe('Gemini captureResponse — image generation', () => {
       responseHtml: '<p>Hello!</p>',
     });
 
-    const result = await geminiActions.captureResponse(page as any, {
+    const result = await geminiActions.captureResponse(page as never, {
       timeoutMs: 5_000,
     });
 
@@ -199,7 +199,7 @@ describe('Gemini captureResponse — image generation', () => {
       responseHtml: '<p>Hello <strong>world</strong></p>',
     });
 
-    const result = await geminiActions.captureResponse(page as any, {
+    const result = await geminiActions.captureResponse(page as never, {
       timeoutMs: 5_000,
     });
 

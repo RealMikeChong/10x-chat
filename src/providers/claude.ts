@@ -26,8 +26,17 @@ const SELECTORS = {
     '[role="menuitemradio"], [role="menuitem"], [role="option"], button, [role="button"]',
 } as const;
 
+const MODEL_OPTION_SCOPE_SELECTORS = [
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[data-radix-popper-content-wrapper]',
+  '[data-headlessui-portal]',
+  '[data-floating-ui-portal]',
+  '[role="dialog"]',
+] as const;
+
 const THINKING_PREFIX_RE =
-  /^(thinking(?: about)?\b|thought for\b|pondering\b|identified\b|analyzing\b|considering\b|evaluating\b|processing\b|synthesized?\b|let me\b)/i;
+  /^(thinking(?: about)?\b|thought for\b|pondering\b|identified\b|analyzing\b|considering\b|evaluating\b|processing\b|synthesized?\b|let me\b|stand by\b)/i;
 
 export function stripClaudeThinkingText(text: string): string {
   const normalized = text.replace(/\r\n?/g, '\n').trim();
@@ -51,85 +60,136 @@ function normalizeModelLabel(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+async function getVisibleModelPickerState(page: Page): Promise<{ found: boolean; text: string }> {
+  return page.evaluate((selector: string) => {
+    const normalizeText = (value: string | null | undefined) =>
+      (value ?? '').replace(/\s+/g, ' ').trim();
+    const isVisible = (element: Element | null): element is HTMLElement => {
+      if (!(element instanceof HTMLElement)) return false;
+      if (element.hidden) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const pickerTextRe = /claude|opus|sonnet|haiku/i;
+    const picker = Array.from(document.querySelectorAll(selector)).find((element) => {
+      return isVisible(element) && pickerTextRe.test(normalizeText(element.textContent));
+    });
+
+    return picker
+      ? { found: true, text: normalizeText(picker.textContent) }
+      : { found: false, text: '' };
+  }, SELECTORS.modelPicker);
 }
 
-async function getVisibleModelPicker(page: Page) {
-  const candidates = page
-    .locator(SELECTORS.modelPicker)
-    .filter({ hasText: /claude|opus|sonnet|haiku/i });
-  const count = await candidates.count();
-  for (let index = 0; index < count; index++) {
-    const candidate = candidates.nth(index);
-    if (await candidate.isVisible().catch(() => false)) {
-      return candidate;
-    }
-  }
+async function clickVisibleModelPicker(page: Page): Promise<boolean> {
+  return page.evaluate((selector: string) => {
+    const normalizeText = (value: string | null | undefined) =>
+      (value ?? '').replace(/\s+/g, ' ').trim();
+    const isVisible = (element: Element | null): element is HTMLElement => {
+      if (!(element instanceof HTMLElement)) return false;
+      if (element.hidden) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const pickerTextRe = /claude|opus|sonnet|haiku/i;
+    const picker = Array.from(document.querySelectorAll(selector)).find((element) => {
+      return isVisible(element) && pickerTextRe.test(normalizeText(element.textContent));
+    });
 
-  return null;
+    if (!(picker instanceof HTMLElement)) {
+      return false;
+    }
+
+    picker.click();
+    return true;
+  }, SELECTORS.modelPicker);
 }
 
-async function getVisibleModelOption(page: Page, model: string) {
-  const exactName = new RegExp(`^\\s*${escapeRegExp(model)}\\s*$`, 'i');
-  const scopedOptions = page
-    .locator(
-      [
-        '[role="menu"]',
-        '[role="listbox"]',
-        '[data-radix-popper-content-wrapper]',
-        '[data-headlessui-portal]',
-        '[data-floating-ui-portal]',
-        '[role="dialog"]',
-      ].join(', '),
-    )
-    .locator(SELECTORS.modelOption)
-    .filter({ hasText: exactName });
+async function clickVisibleModelOption(page: Page, model: string): Promise<boolean> {
+  return page.evaluate(
+    ({ modelLabel, optionSelector, scopeSelectors, excludedSelector }) => {
+      const normalizeText = (value: string | null | undefined) =>
+        (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const isVisible = (element: Element | null): element is HTMLElement => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const matchesModel = (element: Element) => normalizeText(element.textContent) === modelLabel;
+      const isExcluded = (element: Element) =>
+        Boolean(
+          excludedSelector &&
+            (element.matches(excludedSelector) || element.closest(excludedSelector)),
+        );
 
-  const scopedCount = await scopedOptions.count();
-  for (let index = 0; index < scopedCount; index++) {
-    const option = scopedOptions.nth(index);
-    if (await option.isVisible().catch(() => false)) {
-      return option;
-    }
-  }
+      for (const scopeSelector of scopeSelectors) {
+        const scopes = Array.from(document.querySelectorAll(scopeSelector));
+        for (const scope of scopes) {
+          const option = Array.from(scope.querySelectorAll(optionSelector)).find((element) => {
+            return isVisible(element) && matchesModel(element);
+          });
+          if (option instanceof HTMLElement) {
+            option.click();
+            return true;
+          }
+        }
+      }
 
-  const fallbackOptions = page.locator(SELECTORS.modelOption).filter({ hasText: exactName });
-  const fallbackCount = await fallbackOptions.count();
-  for (let index = 0; index < fallbackCount; index++) {
-    const option = fallbackOptions.nth(index);
-    if (await option.isVisible().catch(() => false)) {
-      return option;
-    }
-  }
+      const fallbackOption = Array.from(document.querySelectorAll(optionSelector)).find(
+        (element) => {
+          return isVisible(element) && !isExcluded(element) && matchesModel(element);
+        },
+      );
 
-  return null;
+      if (!(fallbackOption instanceof HTMLElement)) {
+        return false;
+      }
+
+      fallbackOption.click();
+      return true;
+    },
+    {
+      modelLabel: normalizeModelLabel(model),
+      optionSelector: SELECTORS.modelOption,
+      scopeSelectors: [...MODEL_OPTION_SCOPE_SELECTORS],
+      excludedSelector: SELECTORS.modelPicker,
+    },
+  );
 }
 
 export const claudeActions: ProviderActions = {
   async selectModel(page: Page, model: string): Promise<void> {
-    const picker = await getVisibleModelPicker(page);
-    if (!picker) {
+    const picker = await getVisibleModelPickerState(page);
+    if (!picker.found) {
       console.warn(`Claude model picker not found — skipping model selection for "${model}"`);
       return;
     }
 
-    const currentModel = normalizeModelLabel(await picker.textContent().catch(() => ''));
-    if (currentModel === normalizeModelLabel(model)) {
+    if (normalizeModelLabel(picker.text) === normalizeModelLabel(model)) {
       return;
     }
 
-    await picker.click({ force: true });
+    const pickerClicked = await clickVisibleModelPicker(page);
+    if (!pickerClicked) {
+      console.warn(`Claude model picker not found — skipping model selection for "${model}"`);
+      return;
+    }
     await page.waitForTimeout(750);
 
-    const option = await getVisibleModelOption(page, model);
-    if (!option) {
+    const optionClicked = await clickVisibleModelOption(page, model);
+    if (!optionClicked) {
       console.warn(`Model "${model}" not found in Claude picker — using current model`);
       await page.keyboard.press('Escape').catch(() => {});
       return;
     }
 
-    await option.click({ force: true });
     await page.waitForTimeout(500);
   },
 
