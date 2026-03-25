@@ -14,7 +14,7 @@ export const GROK_CONFIG: ProviderConfig = {
   displayName: 'Grok',
   url: 'https://grok.com',
   loginUrl: 'https://grok.com',
-  models: ['grok-3', 'grok-3-mini', 'grok-2'],
+  models: ['grok-3', 'grok-3-think', 'grok-3-deepsearch'],
   defaultModel: 'grok-3',
   defaultTimeoutMs: 5 * 60 * 1000,
 };
@@ -29,11 +29,87 @@ const SELECTORS = {
   /** Login page indicators — updated for current Grok UI (Feb 2026) */
   loginPage:
     'a[href*="x.com/i/flow/login"], a[href*="accounts.x.com"], button:has-text("Sign in"), a:has-text("Sign in"), a:has-text("Log in")',
-  modelSelector: '#model-select-trigger',
   fileInput: 'input[type="file"][name="files"]',
+  thinkToggle: 'button[aria-pressed][aria-label*="Think" i], button:has-text("Think")',
+  deepSearchToggle:
+    'button[aria-pressed][aria-label*="DeepSearch" i], button[aria-pressed][aria-label*="Deep Search" i], button:has-text("DeepSearch"), button:has-text("Deep Search")',
 } as const;
 
+async function getVisibleToggle(page: Page, selector: string) {
+  const candidates = page.locator(selector);
+  const count = await candidates.count();
+  for (let index = 0; index < count; index++) {
+    const candidate = candidates.nth(index);
+    if (await candidate.isVisible().catch(() => false)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function isToggleActive(
+  toggle: Awaited<ReturnType<typeof getVisibleToggle>>,
+): Promise<boolean> {
+  if (!toggle) return false;
+  return toggle
+    .evaluate((element) => {
+      const ariaPressed = element.getAttribute('aria-pressed');
+      const dataState = element.getAttribute('data-state');
+      const classes = element.className.toLowerCase();
+      return (
+        ariaPressed === 'true' ||
+        dataState === 'on' ||
+        classes.includes('active') ||
+        classes.includes('selected')
+      );
+    })
+    .catch(() => false);
+}
+
+async function setToggleState(
+  toggle: Awaited<ReturnType<typeof getVisibleToggle>>,
+  enabled: boolean,
+): Promise<void> {
+  if (!toggle) return;
+  const active = await isToggleActive(toggle);
+  if (active === enabled) return;
+  await toggle.click({ force: true });
+}
+
 export const grokActions: ProviderActions = {
+  async selectModel(page: Page, model: string): Promise<void> {
+    const thinkToggle = await getVisibleToggle(page, SELECTORS.thinkToggle);
+    const deepSearchToggle = await getVisibleToggle(page, SELECTORS.deepSearchToggle);
+
+    if (model === 'grok-3-think') {
+      if (!thinkToggle) {
+        console.warn('Grok Think toggle not found — skipping model selection for "grok-3-think"');
+        return;
+      }
+      await setToggleState(deepSearchToggle, false);
+      await setToggleState(thinkToggle, true);
+      await page.waitForTimeout(500);
+      return;
+    }
+
+    if (model === 'grok-3-deepsearch') {
+      if (!deepSearchToggle) {
+        console.warn(
+          'Grok DeepSearch toggle not found — skipping model selection for "grok-3-deepsearch"',
+        );
+        return;
+      }
+      await setToggleState(thinkToggle, false);
+      await setToggleState(deepSearchToggle, true);
+      await page.waitForTimeout(500);
+      return;
+    }
+
+    await setToggleState(thinkToggle, false);
+    await setToggleState(deepSearchToggle, false);
+    await page.waitForTimeout(500);
+  },
+
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       // Wait for page to settle — either composer or login indicator will appear

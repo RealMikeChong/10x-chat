@@ -13,8 +13,8 @@ export const CHATGPT_CONFIG: ProviderConfig = {
   displayName: 'ChatGPT',
   url: 'https://chatgpt.com',
   loginUrl: 'https://chatgpt.com/auth/login',
-  models: ['GPT-4o', 'GPT-4o mini', 'GPT-4.5', 'o1', 'o3-mini'],
-  defaultModel: 'GPT-4o',
+  models: ['GPT-5.2', 'o3', 'o4-mini-high', 'GPT-4o'],
+  defaultModel: 'GPT-5.2',
   defaultTimeoutMs: 5 * 60 * 1000,
   // ChatGPT's Cloudflare bot-protection blocks headless Playwright permanently.
   // The chat orchestrator will automatically force headed mode for this provider.
@@ -31,7 +31,73 @@ const SELECTORS = {
   loginPage: 'button:has-text("Log in"), button:has-text("Sign up")',
   /** Hidden file input — exclude the dedicated photo/camera inputs */
   fileInput: 'input[type="file"]:not(#upload-photos):not(#upload-camera)',
+  modelPicker:
+    'button[data-testid="model-selector"], button[aria-label*="model" i], button[aria-haspopup="menu"], button[aria-haspopup="listbox"], button[aria-haspopup="dialog"]',
+  modelOption:
+    '[role="menuitemradio"], [role="menuitem"], [role="option"], button, [role="button"]',
 } as const;
+
+function normalizeModelLabel(text: string | null | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function getVisibleModelPicker(page: Page) {
+  const explicitPicker = page.locator('button[data-testid="model-selector"]').first();
+  if (await explicitPicker.isVisible().catch(() => false)) {
+    return explicitPicker;
+  }
+
+  const candidates = page.locator(SELECTORS.modelPicker).filter({ hasText: /gpt|o3|o4/i });
+  const count = await candidates.count();
+  for (let index = 0; index < count; index++) {
+    const candidate = candidates.nth(index);
+    if (await candidate.isVisible().catch(() => false)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function getVisibleModelOption(page: Page, model: string) {
+  const exactName = new RegExp(`^\\s*${escapeRegExp(model)}\\s*$`, 'i');
+  const scopedOptions = page
+    .locator(
+      [
+        '[role="menu"]',
+        '[role="listbox"]',
+        '[data-radix-popper-content-wrapper]',
+        '[data-headlessui-portal]',
+        '[data-floating-ui-portal]',
+        '[role="dialog"]',
+      ].join(', '),
+    )
+    .locator(SELECTORS.modelOption)
+    .filter({ hasText: exactName });
+
+  const scopedCount = await scopedOptions.count();
+  for (let index = 0; index < scopedCount; index++) {
+    const option = scopedOptions.nth(index);
+    if (await option.isVisible().catch(() => false)) {
+      return option;
+    }
+  }
+
+  const fallbackOptions = page.locator(SELECTORS.modelOption).filter({ hasText: exactName });
+  const fallbackCount = await fallbackOptions.count();
+  for (let index = 0; index < fallbackCount; index++) {
+    const option = fallbackOptions.nth(index);
+    if (await option.isVisible().catch(() => false)) {
+      return option;
+    }
+  }
+
+  return null;
+}
 
 /**
  * Dismiss ChatGPT onboarding modals, cookie banners, and other overlays
@@ -101,6 +167,34 @@ export class CloudflareBlockedError extends Error {
 }
 
 export const chatgptActions: ProviderActions = {
+  async selectModel(page: Page, model: string): Promise<void> {
+    await dismissOverlays(page);
+
+    const picker = await getVisibleModelPicker(page);
+    if (!picker) {
+      console.warn(`ChatGPT model picker not found — skipping model selection for "${model}"`);
+      return;
+    }
+
+    const currentModel = normalizeModelLabel(await picker.textContent().catch(() => ''));
+    if (currentModel === normalizeModelLabel(model)) {
+      return;
+    }
+
+    await picker.click({ force: true });
+    await page.waitForTimeout(750);
+
+    const option = await getVisibleModelOption(page, model);
+    if (!option) {
+      console.warn(`Model "${model}" not found in ChatGPT picker — using current model`);
+      await page.keyboard.press('Escape').catch(() => {});
+      return;
+    }
+
+    await option.click({ force: true });
+    await page.waitForTimeout(500);
+  },
+
   async isLoggedIn(page: Page): Promise<boolean> {
     // Detect Cloudflare challenge before anything else.
     // This happens when running headless — Cloudflare blocks non-human browsers.

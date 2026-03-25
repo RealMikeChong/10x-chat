@@ -8,7 +8,7 @@ export const CLAUDE_CONFIG: ProviderConfig = {
   displayName: 'Claude',
   url: 'https://claude.ai/new',
   loginUrl: 'https://claude.ai/login',
-  models: ['Claude 4 Sonnet', 'Claude 4 Opus'],
+  models: ['Claude 4 Opus', 'Claude 4 Sonnet', 'Claude 3.5 Haiku'],
   defaultModel: 'Claude 4 Sonnet',
   defaultTimeoutMs: 5 * 60 * 1000,
 };
@@ -20,6 +20,10 @@ const SELECTORS = {
   responseTurn:
     '[data-is-streaming], .font-claude-message, .font-claude-response, [data-testid="assistant-message"], [data-testid="user-message"] ~ div',
   fileInput: '[data-testid="file-upload"], #chat-input-file-upload-onpage',
+  modelPicker:
+    'button[aria-label*="model" i], button[aria-haspopup="menu"], button[aria-haspopup="listbox"], [role="button"][aria-haspopup="menu"], [role="button"][aria-haspopup="listbox"]',
+  modelOption:
+    '[role="menuitemradio"], [role="menuitem"], [role="option"], button, [role="button"]',
 } as const;
 
 const THINKING_PREFIX_RE =
@@ -43,7 +47,92 @@ export function stripClaudeThinkingText(text: string): string {
   return normalized;
 }
 
+function normalizeModelLabel(text: string | null | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function getVisibleModelPicker(page: Page) {
+  const candidates = page
+    .locator(SELECTORS.modelPicker)
+    .filter({ hasText: /claude|opus|sonnet|haiku/i });
+  const count = await candidates.count();
+  for (let index = 0; index < count; index++) {
+    const candidate = candidates.nth(index);
+    if (await candidate.isVisible().catch(() => false)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function getVisibleModelOption(page: Page, model: string) {
+  const exactName = new RegExp(`^\\s*${escapeRegExp(model)}\\s*$`, 'i');
+  const scopedOptions = page
+    .locator(
+      [
+        '[role="menu"]',
+        '[role="listbox"]',
+        '[data-radix-popper-content-wrapper]',
+        '[data-headlessui-portal]',
+        '[data-floating-ui-portal]',
+        '[role="dialog"]',
+      ].join(', '),
+    )
+    .locator(SELECTORS.modelOption)
+    .filter({ hasText: exactName });
+
+  const scopedCount = await scopedOptions.count();
+  for (let index = 0; index < scopedCount; index++) {
+    const option = scopedOptions.nth(index);
+    if (await option.isVisible().catch(() => false)) {
+      return option;
+    }
+  }
+
+  const fallbackOptions = page.locator(SELECTORS.modelOption).filter({ hasText: exactName });
+  const fallbackCount = await fallbackOptions.count();
+  for (let index = 0; index < fallbackCount; index++) {
+    const option = fallbackOptions.nth(index);
+    if (await option.isVisible().catch(() => false)) {
+      return option;
+    }
+  }
+
+  return null;
+}
+
 export const claudeActions: ProviderActions = {
+  async selectModel(page: Page, model: string): Promise<void> {
+    const picker = await getVisibleModelPicker(page);
+    if (!picker) {
+      console.warn(`Claude model picker not found — skipping model selection for "${model}"`);
+      return;
+    }
+
+    const currentModel = normalizeModelLabel(await picker.textContent().catch(() => ''));
+    if (currentModel === normalizeModelLabel(model)) {
+      return;
+    }
+
+    await picker.click({ force: true });
+    await page.waitForTimeout(750);
+
+    const option = await getVisibleModelOption(page, model);
+    if (!option) {
+      console.warn(`Model "${model}" not found in Claude picker — using current model`);
+      await page.keyboard.press('Escape').catch(() => {});
+      return;
+    }
+
+    await option.click({ force: true });
+    await page.waitForTimeout(500);
+  },
+
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       await page
