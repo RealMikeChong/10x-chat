@@ -80,6 +80,13 @@ export async function runChat(options: ChatOptions): Promise<ChatResult> {
       );
     }
 
+    // Select model if provider supports it
+    const modelName = options.model ?? provider.config.defaultModel;
+    if (modelName && provider.actions.selectModel) {
+      console.log(chalk.dim(`Selecting model: ${modelName}`));
+      await provider.actions.selectModel(browser.page, modelName);
+    }
+
     // Submit prompt
     console.log(chalk.dim('Submitting prompt...'));
 

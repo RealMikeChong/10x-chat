@@ -38,11 +38,11 @@ Use `npx` (not `bunx` — symlink conflicts in parallel).
 
 ## Providers
 
-| Provider | Chat | Image | Research | Notes |
-|----------|------|-------|----------|-------|
-| chatgpt | ✅ | ✅ (DALL-E) | ✅ | Runs headed by default (anti-bot) |
-| gemini | ✅ | ✅ (Imagen) | ✅ | |
-| claude | ✅ | ❌ | ❌ | Runs headed by default |
+| Provider | Chat | Image | Research | Models | Notes |
+|----------|------|-------|----------|--------|-------|
+| chatgpt | ✅ | ✅ (DALL-E) | ✅ | — | Runs headed by default (anti-bot) |
+| gemini | ✅ | ✅ (Imagen) | ✅ | Fast, **Thinking** (default), Pro | `--model` switches mode |
+| claude | ✅ | ❌ | ❌ | — | Runs headed by default |
 | grok | ✅ | ❌ | ❌ | UI changes often, use `@latest` |
 | perplexity | ✅ | ❌ | ✅ | Best for research with citations |
 | notebooklm | ✅ | ❌ | ❌ | Add sources first, then chat |
@@ -61,6 +61,7 @@ npx 10x-chat@latest login notebooklm
 # Chat
 npx 10x-chat@latest chat -p "Review this code for bugs" --provider chatgpt --file "src/**/*.ts"
 npx 10x-chat@latest chat --provider gemini --file "path/to/prompt.md" -p "Complete this task"
+npx 10x-chat@latest chat --provider gemini --model Pro -p "Solve this math problem"
 
 # Image generation
 npx 10x-chat@latest image -p "A fox astronaut in space" --provider chatgpt

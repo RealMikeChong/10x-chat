@@ -43,6 +43,7 @@ CLI (Commander)
 
 Provider actions implement:
 - `isLoggedIn(page)` — detect auth state
+- `selectModel?(page, model)` — optional; switch model/mode via the provider's UI picker before sending
 - `submitPrompt(page, prompt)` — type and send
 - `captureResponse(page, opts)` — poll until stable, return text + markdown
 
@@ -53,6 +54,7 @@ Provider actions implement:
 - **Browser daemon**: `chromium.launchServer` persisted to disk for cross-CLI reuse
 - **Tab ref-counting**: Multiple CLI invocations share one Chromium; last tab stops the daemon
 - **Force-click**: Some providers need `click({ force: true })` to bypass overlay interception
+- **Model selection**: Orchestrator calls `selectModel()` before `submitPrompt()` if the provider implements it. Model resolved from `--model` flag → `provider.config.defaultModel`. Gemini supports modes: Fast, Thinking (default), Pro
 
 ## Pre-Commit Checklist
 

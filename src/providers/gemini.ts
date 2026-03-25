@@ -13,14 +13,17 @@ export const GEMINI_CONFIG: ProviderConfig = {
   displayName: 'Gemini',
   url: 'https://gemini.google.com/app',
   loginUrl: 'https://gemini.google.com/app',
-  models: ['Gemini 2.5 Pro', 'Gemini 2.5 Flash'],
-  defaultModel: 'Gemini 2.5 Pro',
+  models: ['Pro', 'Thinking', 'Fast'],
+  defaultModel: 'Thinking',
   defaultTimeoutMs: 5 * 60 * 1000,
 };
 
 const SELECTORS = {
   composer: '.ql-editor[contenteditable="true"], div[role="textbox"][aria-label*="prompt"]',
   sendButton: 'button.send-button, button[aria-label="Send message"]',
+  /** Model/mode picker button near the composer (Gemini calls it "mode picker") */
+  modelPicker:
+    'button[data-test-id="bard-mode-menu-button"], button[aria-label="Open mode picker"]',
   /** model-response is the Angular custom element wrapping each AI turn */
   responseTurn: 'model-response .model-response-text, model-response message-content',
   /** Indicators that Gemini is still generating (text streaming or image generation in flight) */
@@ -112,6 +115,40 @@ async function waitForImages(page: Page, timeoutMs: number): Promise<void> {
 }
 
 export const geminiActions: ProviderActions = {
+  async selectModel(page: Page, model: string): Promise<void> {
+    // Check if the desired mode is already selected by reading the picker label
+    const picker = page.locator(SELECTORS.modelPicker).first();
+    const pickerVisible = await picker.isVisible().catch(() => false);
+    if (!pickerVisible) {
+      console.warn(`Gemini mode picker not found — skipping model selection for "${model}"`);
+      return;
+    }
+
+    const currentMode = (await picker.textContent())?.trim() ?? '';
+    if (currentMode.toLowerCase() === model.toLowerCase()) {
+      return; // Already on the requested mode
+    }
+
+    // Open the mode picker menu
+    await picker.click();
+    await page.waitForTimeout(1000);
+
+    // Select by data-test-id (e.g. "Thinking" → "bard-mode-option-thinking")
+    const testId = `bard-mode-option-${model.toLowerCase()}`;
+    const option = page.locator(`button[data-test-id="${testId}"]`).first();
+    const optionVisible = await option
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!optionVisible) {
+      console.warn(`Mode "${model}" not found in Gemini picker — using current mode`);
+      await page.keyboard.press('Escape');
+      return;
+    }
+    await option.click();
+    await page.waitForTimeout(500);
+  },
+
   async isLoggedIn(page: Page): Promise<boolean> {
     try {
       await page

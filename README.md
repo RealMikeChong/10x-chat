@@ -64,7 +64,7 @@ npx 10x-chat@latest chat -p "Long task" --timeout 600000 --headed  # 10min timeo
 |------|-------------|
 | `-p, --prompt <text>` | **(required)** The prompt to send |
 | `--provider <name>` | Provider: `chatgpt`, `gemini`, `claude`, `grok`, `perplexity`, `notebooklm` (default: config) |
-| `--model <name>` | Model to select in the UI |
+| `--model <name>` | Model/mode to select in the provider UI (e.g. Gemini: `Fast`, `Thinking`, `Pro`) |
 | `-f, --file <paths...>` | Files/globs to bundle as context |
 | `--copy` | Copy bundle to clipboard instead of sending |
 | `--dry-run` | Preview the bundle without sending |
@@ -204,14 +204,14 @@ This lets agents like Codex or Claude Code use 10x-chat to query other models fo
 
 ## Supported Providers
 
-| Provider | Status | URL |
-|----------|--------|-----|
-| ChatGPT | ✅ | chatgpt.com |
-| Gemini | ✅ | gemini.google.com |
-| Claude | ✅ | claude.ai |
-| Grok | ✅ | grok.com |
-| Perplexity | ✅ | perplexity.ai |
-| NotebookLM | ✅ | notebooklm.google.com |
+| Provider | Status | Models | URL |
+|----------|--------|--------|-----|
+| ChatGPT | ✅ | — | chatgpt.com |
+| Gemini | ✅ | Fast, **Thinking** (default), Pro | gemini.google.com |
+| Claude | ✅ | — | claude.ai |
+| Grok | ✅ | — | grok.com |
+| Perplexity | ✅ | — | perplexity.ai |
+| NotebookLM | ✅ | — | notebooklm.google.com |
 
 ## Development
 
