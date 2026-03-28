@@ -6,6 +6,7 @@ import { launchSharedBrowserSession } from './daemon.js';
 import { acquireProfileLock, type ProfileLock } from './lock.js';
 import { CHROMIUM_ARGS } from './process.js';
 import { saveStorageState } from './state.js';
+import { detectChromeChannel, STEALTH_INIT_SCRIPT } from './stealth.js';
 
 export interface BrowserSession {
   context: BrowserContext;
@@ -99,11 +100,14 @@ async function launchSharedPersistentBrowser(opts: LaunchOptions): Promise<Brows
   let context: BrowserContext;
   let page: Page;
   try {
+    const channel = detectChromeChannel();
     context = await chromium.launchPersistentContext(profileDir, {
       headless,
       viewport: { width: 1280, height: 900 },
+      ...(channel ? { channel } : {}),
       args: CHROMIUM_ARGS,
     });
+    await context.addInitScript(STEALTH_INIT_SCRIPT);
 
     page = context.pages()[0] ?? (await context.newPage());
 
@@ -146,11 +150,14 @@ async function launchIsolatedBrowser(opts: LaunchOptions): Promise<BrowserSessio
   let context: BrowserContext;
   let page: Page;
   try {
+    const channel = detectChromeChannel();
     context = await chromium.launchPersistentContext(profileDir, {
       headless,
       viewport: { width: 1280, height: 900 },
+      ...(channel ? { channel } : {}),
       args: CHROMIUM_ARGS,
     });
+    await context.addInitScript(STEALTH_INIT_SCRIPT);
 
     page = context.pages()[0] ?? (await context.newPage());
 

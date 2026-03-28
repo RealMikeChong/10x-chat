@@ -15,6 +15,7 @@ import {
 } from 'playwright';
 import { getAppDir } from '../paths.js';
 import { CHROMIUM_ARGS } from './process.js';
+import { detectChromeChannel, STEALTH_INIT_SCRIPT } from './stealth.js';
 
 type JsonPrimitive = boolean | number | string | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -292,6 +293,8 @@ async function handleRpc(body: RpcRequest): Promise<RpcResponse> {
       }
 
       const context = await browser.newContext((args[0] as Record<string, unknown>) ?? {});
+      // Inject stealth patches into every page created in this context
+      await context.addInitScript(STEALTH_INIT_SCRIPT);
       const contextId = randomUUID();
       contexts.set(contextId, context);
       return { ok: true, result: toContextHandle(contextId) };
@@ -561,11 +564,16 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 async function main(): Promise<void> {
+  const channel = detectChromeChannel();
+
   browser = await chromium.launch({
     headless: HEADLESS,
+    ...(channel ? { channel } : {}),
     args: CHROMIUM_ARGS,
   });
 
+  // Inject stealth script into the default browser context
+  // so every new page automatically gets the anti-detection patches
   browser.on('disconnected', () => {
     void clearStateFile().finally(() => process.exit(1));
   });
