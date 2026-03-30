@@ -7,14 +7,19 @@ function createModelPage(evaluateResults: unknown[]) {
   const queue = [...evaluateResults];
   const locatorState = new Map<
     string,
-    { first: ReturnType<typeof vi.fn>; click: ReturnType<typeof vi.fn> }
+    {
+      first: ReturnType<typeof vi.fn>;
+      click: ReturnType<typeof vi.fn>;
+      isVisible: ReturnType<typeof vi.fn>;
+    }
   >();
   const locator = vi.fn((selector: string) => {
     let state = locatorState.get(selector);
     if (!state) {
       const click = vi.fn(async () => {});
-      const first = vi.fn(() => ({ click }));
-      state = { first, click };
+      const isVisible = vi.fn(async () => false);
+      const first = vi.fn(() => ({ click, isVisible }));
+      state = { first, click, isVisible };
       locatorState.set(selector, state);
     }
     return { first: state.first };

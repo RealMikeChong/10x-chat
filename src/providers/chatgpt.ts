@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import { pollUntilStable } from '../core/polling.js';
 import type {
   CapturedResponse,
@@ -7,6 +7,32 @@ import type {
   ProviderConfig,
 } from '../types.js';
 import { submitPromptToComposer } from './submit.js';
+
+const ASSISTANT_TURN_FALLBACK_SELECTORS = [
+  'div.agent-turn',
+  'article[data-testid^="conversation-turn-"]:has(.markdown)',
+  'div[data-message-id]:has(.markdown)',
+  '[data-message-author-role="assistant"]',
+  '.markdown',
+] as const;
+
+const ASSISTANT_TURN_COUNT_SELECTORS = [
+  'div.agent-turn',
+  'article[data-testid^="conversation-turn-"]:has(.markdown)',
+  'div[data-message-id]:has(.markdown)',
+  '[data-message-author-role="assistant"]',
+] as const;
+
+const ASSISTANT_CONTENT_FALLBACK_SELECTORS = [
+  'div.agent-turn .markdown',
+  'article[data-testid^="conversation-turn-"]:has(.markdown) .markdown',
+  'div[data-message-id]:has(.markdown) .markdown',
+  'div.agent-turn',
+  'article[data-testid^="conversation-turn-"]:has(.markdown)',
+  'div[data-message-id]:has(.markdown)',
+  '[data-message-author-role="assistant"]',
+  '.markdown',
+] as const;
 
 export const CHATGPT_CONFIG: ProviderConfig = {
   name: 'chatgpt',
@@ -23,11 +49,11 @@ export const CHATGPT_CONFIG: ProviderConfig = {
 
 const SELECTORS = {
   composer:
-    '#prompt-textarea, [data-testid="composer-input"], div.ProseMirror[contenteditable="true"]',
+    '#prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"], #prompt-textarea[contenteditable="true"], [data-testid="composer-input"], div.ProseMirror[contenteditable="true"], textarea, .wcDTda_fallbackTextarea',
   sendButton:
     '#composer-submit-button, button[aria-label="Send prompt"], [data-testid="send-button"]',
   stopButton: 'button[aria-label="Stop streaming"]',
-  assistantTurn: '[data-message-author-role="assistant"]',
+  assistantTurn: ASSISTANT_TURN_FALLBACK_SELECTORS.join(', '),
   loginPage: 'button:has-text("Log in"), button:has-text("Sign up")',
   /** Hidden file input — exclude the dedicated photo/camera inputs */
   fileInput: 'input[type="file"]:not(#upload-photos):not(#upload-camera)',
@@ -47,6 +73,35 @@ const MODEL_OPTION_SCOPE_SELECTORS = [
 
 function normalizeModelLabel(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+async function getAssistantTurnCount(page: Page): Promise<number> {
+  for (const selector of ASSISTANT_TURN_COUNT_SELECTORS) {
+    const count = await page
+      .locator(selector)
+      .count()
+      .catch(() => 0);
+    if (count > 0) {
+      return count;
+    }
+  }
+
+  return page
+    .locator(SELECTORS.assistantTurn)
+    .count()
+    .catch(() => 0);
+}
+
+async function getLatestAssistantContent(page: Page): Promise<Locator> {
+  for (const selector of ASSISTANT_CONTENT_FALLBACK_SELECTORS) {
+    const locator = page.locator(selector);
+    const count = await locator.count().catch(() => 0);
+    if (count > 0) {
+      return locator.last();
+    }
+  }
+
+  return page.locator(SELECTORS.assistantTurn).last();
 }
 
 async function getVisibleModelPickerState(page: Page): Promise<{ found: boolean; text: string }> {
@@ -159,6 +214,11 @@ async function clickVisibleModelOption(page: Page, model: string): Promise<boole
  */
 async function dismissOverlays(page: Page): Promise<void> {
   const overlaySelectors = [
+    // Login/signup modal that blocks all pointer events
+    '#modal-no-auth-login button:has-text("Stay logged out")',
+    '#modal-no-auth-login button:has-text("Continue without login")',
+    '#modal-no-auth-login button:has-text("Not now")',
+    '#modal-no-auth-login button[aria-label="Close"]',
     // Onboarding modal skip/dismiss buttons
     '#modal-onboarding button:has-text("Skip")',
     '#modal-onboarding button:has-text("Next")',
@@ -181,12 +241,18 @@ async function dismissOverlays(page: Page): Promise<void> {
     try {
       const btn = page.locator(selector).first();
       if (await btn.isVisible().catch(() => false)) {
-        await btn.click();
+        await btn.click({ force: true });
         await page.waitForTimeout(300);
       }
     } catch {
       // Ignore — overlay may not exist
     }
+  }
+
+  const noAuthModal = page.locator('#modal-no-auth-login').first();
+  if (await noAuthModal.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(300);
   }
 }
 
@@ -322,13 +388,13 @@ export const chatgptActions: ProviderActions = {
     // ChatGPT navigates from / to /c/<id> after sending a new message.
     // This resets the DOM, so we cannot rely on a fixed nth() index.
     // Strategy: track initial turn count + URL to detect the new response.
-    const initialTurnCount = await page.locator(SELECTORS.assistantTurn).count();
+    const initialTurnCount = await getAssistantTurnCount(page);
 
     // Phase 1: Wait for a new assistant turn to appear
     const waitForNewTurn = async (): Promise<void> => {
       while (Date.now() - startTime < timeoutMs) {
         const currentUrl = page.url();
-        const currentCount = await page.locator(SELECTORS.assistantTurn).count();
+        const currentCount = await getAssistantTurnCount(page);
 
         // Case 1: URL changed (new conversation) — any turn is "ours"
         if (currentUrl !== initialUrl && currentCount > 0) return;
@@ -346,7 +412,7 @@ export const chatgptActions: ProviderActions = {
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
     const { text: lastText, truncated } = await pollUntilStable(page, {
       getText: async (p) => {
-        const lastTurn = p.locator(SELECTORS.assistantTurn).last();
+        const lastTurn = await getLatestAssistantContent(p);
         const remaining = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
         return (await lastTurn.textContent({ timeout: remaining }))?.trim() ?? '';
       },
@@ -361,7 +427,7 @@ export const chatgptActions: ProviderActions = {
     });
 
     // Extract the final HTML content
-    const lastTurn = page.locator(SELECTORS.assistantTurn).last();
+    const lastTurn = await getLatestAssistantContent(page);
     const finalRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
     const markdown = (await lastTurn.innerHTML({ timeout: finalRemainingMs })) ?? '';
 

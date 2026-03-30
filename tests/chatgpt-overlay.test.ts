@@ -14,6 +14,7 @@ function createMockPage(options: { hasOnboardingModal?: boolean; hasComposer?: b
   const mockLocator = (selector: string) => {
     locatorCalls.push(selector);
     const isOverlay =
+      selector.includes('modal-no-auth-login') ||
       selector.includes('modal-onboarding') ||
       selector.includes('dialog') ||
       selector.includes('Close') ||
@@ -87,9 +88,14 @@ describe('ChatGPT Overlay Dismissal', () => {
 
     // Should have called locator for overlay-related selectors
     const overlayChecks = locatorCalls.filter(
-      (s: string) => s.includes('modal-onboarding') || s.includes('dialog') || s.includes('Close'),
+      (s: string) =>
+        s.includes('modal-no-auth-login') ||
+        s.includes('modal-onboarding') ||
+        s.includes('dialog') ||
+        s.includes('Close'),
     );
     expect(overlayChecks.length).toBeGreaterThan(0);
+    expect(locatorCalls.some((s: string) => s.includes('modal-no-auth-login'))).toBe(true);
 
     // Overlay buttons should have been clicked
     expect(clickedSelectors.length).toBeGreaterThan(0);
