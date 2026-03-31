@@ -469,6 +469,24 @@ async function handleRpc(body: RpcRequest): Promise<RpcResponse> {
         case 'setInputFiles':
           await locator.setInputFiles((args[0] as string | string[]) ?? []);
           return { ok: true, result: null, pageState: buildPageState(pageId) };
+        case 'evaluate': {
+          const pageFunction = args[0];
+          const arg = args[1];
+          let result: unknown;
+          if (typeof pageFunction === 'function' || typeof pageFunction === 'string') {
+            result =
+              arg !== undefined
+                ? await locator.evaluate(pageFunction as never, arg as never)
+                : await locator.evaluate(pageFunction as never);
+          } else {
+            throw new Error('Unsupported evaluate payload');
+          }
+          return {
+            ok: true,
+            result: serializeValue(result),
+            pageState: buildPageState(pageId),
+          };
+        }
         default:
           throw new Error(`Unsupported locator method: ${body.method}`);
       }

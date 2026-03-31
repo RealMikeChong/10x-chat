@@ -419,6 +419,8 @@ function createRemoteLocatorProxy(
       invoke('textContent', [options ?? {}]),
     innerHTML: async (options?: Record<string, unknown>) => invoke('innerHTML', [options ?? {}]),
     setInputFiles: async (files: string | string[]) => invoke('setInputFiles', [files]),
+    evaluate: async (pageFunction: unknown, arg?: unknown) =>
+      invoke('evaluate', [pageFunction, arg]),
   } as unknown as ReturnType<Page['locator']>;
 }
 
