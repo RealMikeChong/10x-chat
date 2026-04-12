@@ -25,7 +25,7 @@ async function loadEngine(): Promise<BrowserType> {
   try {
     const patchright = await import('patchright');
     if (patchright.chromium) {
-      _chromium = patchright.chromium as BrowserType;
+      _chromium = patchright.chromium as unknown as BrowserType;
       _engineName = 'patchright';
       _loaded = true;
       return _chromium;
@@ -36,7 +36,7 @@ async function loadEngine(): Promise<BrowserType> {
 
   try {
     const playwright = await import('playwright');
-    _chromium = playwright.chromium as BrowserType;
+    _chromium = playwright.chromium as unknown as BrowserType;
     _engineName = 'playwright';
     _loaded = true;
     return _chromium;

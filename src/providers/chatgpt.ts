@@ -1,4 +1,4 @@
-import type { Locator, Page } from 'playwright';
+import type { Page } from 'playwright';
 import { pollUntilStable } from '../core/polling.js';
 import type {
   CapturedResponse,
@@ -92,16 +92,40 @@ async function getAssistantTurnCount(page: Page): Promise<number> {
     .catch(() => 0);
 }
 
-async function getLatestAssistantContent(page: Page): Promise<Locator> {
-  for (const selector of ASSISTANT_CONTENT_FALLBACK_SELECTORS) {
-    const locator = page.locator(selector);
-    const count = await locator.count().catch(() => 0);
-    if (count > 0) {
-      return locator.last();
-    }
-  }
+async function getLatestAssistantSnapshot(
+  page: Page,
+): Promise<{ found: boolean; text: string; html: string }> {
+  return page.evaluate(
+    (selectors: readonly string[]) => {
+      const isVisible = (element: Element | null): element is HTMLElement => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
 
-  return page.locator(SELECTORS.assistantTurn).last();
+      for (const selector of selectors) {
+        const matches = Array.from(document.querySelectorAll(selector));
+        if (matches.length === 0) continue;
+
+        const visibleMatches = matches.filter(isVisible);
+        const last = (visibleMatches.length > 0 ? visibleMatches : matches).at(-1);
+        if (!(last instanceof Element)) continue;
+
+        const text =
+          last instanceof HTMLElement
+            ? (last.innerText || last.textContent || '').trim()
+            : (last.textContent || '').trim();
+        const html = 'innerHTML' in last ? (last as HTMLElement).innerHTML || '' : '';
+        return { found: true, text, html };
+      }
+
+      return { found: false, text: '', html: '' };
+    },
+    [...ASSISTANT_CONTENT_FALLBACK_SELECTORS],
+  );
 }
 
 async function getVisibleModelPickerState(page: Page): Promise<{ found: boolean; text: string }> {
@@ -415,9 +439,8 @@ export const chatgptActions: ProviderActions = {
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
     const { text: lastText, truncated } = await pollUntilStable(page, {
       getText: async (p) => {
-        const lastTurn = await getLatestAssistantContent(p);
-        const remaining = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-        return (await lastTurn.textContent({ timeout: remaining }))?.trim() ?? '';
+        const snapshot = await getLatestAssistantSnapshot(p);
+        return snapshot.text;
       },
       timeoutMs: remainingMs,
       onChunk,
@@ -429,10 +452,11 @@ export const chatgptActions: ProviderActions = {
           .catch(() => false),
     });
 
-    // Extract the final HTML content
-    const lastTurn = await getLatestAssistantContent(page);
-    const finalRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-    const markdown = (await lastTurn.innerHTML({ timeout: finalRemainingMs })) ?? '';
+    // Extract the final HTML content using page.evaluate instead of locator.textContent/innerHTML.
+    // ChatGPT's current UI exposes the nodes, but daemon-proxied locator text extraction can still
+    // time out on them even after they are present in the DOM.
+    const finalSnapshot = await getLatestAssistantSnapshot(page);
+    const markdown = finalSnapshot.html;
 
     // Extract generated images (DALL-E / GPT-Image)
     // ChatGPT uses alt="Generated image: <description>" and src containing
