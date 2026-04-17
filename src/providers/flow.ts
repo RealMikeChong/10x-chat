@@ -27,6 +27,8 @@ export const FLOW_SELECTORS = {
   composerTextbox: '[role="textbox"]',
 
   // Submit
+  // Legacy Flow used a Material icon button containing the text "arrow_forward".
+  // Newer Flow builds often expose a labeled action like "Make clip" instead.
   createButton: 'button:has-text("arrow_forward")',
 
   // Model selector popup — open by clicking the pill button
@@ -212,6 +214,90 @@ export async function uploadKeyframes(
   }
 }
 
+async function clickCreateButton(page: Page): Promise<boolean> {
+  const legacy = page.locator(FLOW_SELECTORS.createButton).last();
+  if (await legacy.isVisible().catch(() => false)) {
+    // Check if it's actually clickable (not disabled)
+    const isDisabled = await legacy.evaluate(
+      (el) =>
+        el.hasAttribute('disabled') ||
+        el.getAttribute('aria-disabled') === 'true' ||
+        (el as HTMLButtonElement).disabled === true,
+    );
+    if (!isDisabled) {
+      await legacy.click();
+      return true;
+    }
+  }
+
+  return page.evaluate(() => {
+    const isVisible = (el: Element | null): el is HTMLElement => {
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.hidden) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    const normalize = (value: string | null | undefined) =>
+      (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    const exclusions = [
+      'new project',
+      'create with flow',
+      'get started',
+      'go back',
+      'add media',
+      'agree',
+      'ingredients',
+      'frames',
+      'landscape',
+      'portrait',
+      'scenebuilder',
+      'arrow_drop_down',
+      'feedback',
+      'help',
+      'settings',
+    ];
+
+    const candidates = Array.from(document.querySelectorAll('button, [role="button"]'))
+      .filter(isVisible)
+      .map((el) => {
+        const text = normalize(el.textContent);
+        const aria = normalize(el.getAttribute('aria-label'));
+        const title = normalize(el.getAttribute('title'));
+        const testid = normalize(el.getAttribute('data-testid'));
+        const hay = `${text} ${aria} ${title} ${testid}`.trim();
+        const rect = el.getBoundingClientRect();
+        const disabled =
+          el.hasAttribute('disabled') ||
+          el.getAttribute('aria-disabled') === 'true' ||
+          (el as HTMLButtonElement).disabled === true;
+
+        let score = 0;
+        if (hay.includes('make clip')) score += 100;
+        if (hay.includes('arrow_forward')) score += 90;
+        if (hay.includes('generate')) score += 80;
+        if (hay.includes('submit') || hay.includes('send')) score += 70;
+        if (hay === 'create' || hay.startsWith('create ')) score += 60;
+        if (rect.top > window.innerHeight * 0.5) score += 15;
+
+        return { el, hay, score, disabled, top: rect.top };
+      })
+      .filter((candidate) => {
+        if (candidate.disabled || candidate.score <= 0) return false;
+        return !exclusions.some((term) => candidate.hay.includes(term));
+      })
+      .sort((a, b) => b.score - a.score || b.top - a.top);
+
+    const target = candidates[0]?.el;
+    if (!(target instanceof HTMLElement)) return false;
+    target.click();
+    return true;
+  });
+}
+
 /**
  * Poll for video generation progress. Returns when all tiles show completion
  * or when the timeout is reached.
@@ -291,10 +377,16 @@ export const flowActions: ProviderActions = {
 
     await page.waitForTimeout(300);
 
-    // Click the → Create button (last arrow_forward button)
-    const createBtn = page.locator(FLOW_SELECTORS.createButton).last();
-    await createBtn.waitFor({ state: 'visible', timeout: 5_000 });
-    await createBtn.click();
+    // Click the create/generate button.
+    // Older Flow builds used an icon-only Material button with text "arrow_forward".
+    // Current builds may expose a labeled button like "Make clip" instead.
+    const clicked = await clickCreateButton(page);
+    if (!clicked) {
+      throw new Error(
+        'Could not find Flow create button after entering prompt. Expected arrow_forward / Make clip / Generate style action.',
+      );
+    }
+    await page.waitForTimeout(300);
   },
 
   async captureResponse(

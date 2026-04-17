@@ -21,6 +21,7 @@ interface MockLocator {
   innerHTML: ReturnType<typeof vi.fn>;
   nth: (n: number) => MockLocator;
   setInputFiles: ReturnType<typeof vi.fn>;
+  evaluate: ReturnType<typeof vi.fn>;
 }
 
 function createMockLocator(opts: { visible?: boolean } = {}): MockLocator {
@@ -37,6 +38,13 @@ function createMockLocator(opts: { visible?: boolean } = {}): MockLocator {
     innerHTML: vi.fn(async () => ''),
     nth: () => loc,
     setInputFiles: vi.fn(async () => {}),
+    evaluate: vi.fn(async (fn: (el: HTMLElement) => unknown) =>
+      fn({
+        hasAttribute: () => false,
+        getAttribute: () => null,
+        disabled: false,
+      } as unknown as HTMLElement),
+    ),
   };
   return loc;
 }
@@ -329,6 +337,46 @@ describe('Flow Provider', () => {
 
       const result = await flowActions.isLoggedIn(page as never);
       expect(result).toBe(false);
+    });
+  });
+
+  describe('flowActions.submitPrompt', () => {
+    it('should click the legacy arrow_forward create button when visible', async () => {
+      const { page, clickedSelectors } = createMockPage({
+        visibleSelectors: {
+          [FLOW_SELECTORS.composer]: true,
+          arrow_forward: true,
+        },
+      });
+
+      await flowActions.submitPrompt(page as never, 'hello world');
+
+      expect(clickedSelectors.some((s) => s.includes('arrow_forward'))).toBe(true);
+    });
+
+    it('should fall back to evaluate-based create button selection when legacy button is missing', async () => {
+      const { page } = createMockPage({
+        visibleSelectors: {
+          [FLOW_SELECTORS.composer]: true,
+        },
+        evaluateReturn: true,
+      });
+
+      await expect(flowActions.submitPrompt(page as never, 'hello world')).resolves.toBeUndefined();
+      expect(page.evaluate).toHaveBeenCalled();
+    });
+
+    it('should throw a clear error when no create button can be found', async () => {
+      const { page } = createMockPage({
+        visibleSelectors: {
+          [FLOW_SELECTORS.composer]: true,
+        },
+        evaluateReturn: false,
+      });
+
+      await expect(flowActions.submitPrompt(page as never, 'hello world')).rejects.toThrow(
+        'Could not find Flow create button',
+      );
     });
   });
 
