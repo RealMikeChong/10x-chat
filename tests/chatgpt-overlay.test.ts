@@ -103,6 +103,36 @@ describe('ChatGPT Overlay Dismissal', () => {
     expect(result).toBe(true);
   });
 
+  it('should remove lingering no-auth modal when composer is visible underneath', async () => {
+    const page = {
+      locator: vi.fn((selector: string) => ({
+        first: vi.fn().mockReturnThis(),
+        last: vi.fn().mockReturnThis(),
+        isVisible: vi.fn(async () => selector.includes('modal-no-auth-login')),
+        waitFor: vi.fn(async () => {}),
+        click: vi.fn(async () => {}),
+        count: vi.fn(async () => 0),
+      })),
+      waitForTimeout: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
+      keyboard: { press: vi.fn(async () => {}) },
+      evaluate: vi
+        .fn()
+        // forced modal removal path in dismissOverlays
+        .mockResolvedValueOnce(true)
+        // composer visible check in isLoggedIn
+        .mockResolvedValueOnce(true),
+      url: vi.fn(() => 'https://chatgpt.com'),
+      title: vi.fn(async () => 'ChatGPT'),
+    };
+
+    const { chatgptActions } = await import('../src/providers/chatgpt.js');
+
+    const result = await chatgptActions.isLoggedIn(page as never);
+    expect(result).toBe(true);
+    expect(page.evaluate).toHaveBeenCalledTimes(2);
+  });
+
   it('should handle overlay dismissal errors gracefully', async () => {
     const page = {
       locator: vi.fn(() => ({

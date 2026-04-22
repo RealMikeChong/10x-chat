@@ -278,6 +278,37 @@ async function dismissOverlays(page: Page): Promise<void> {
     await page.keyboard.press('Escape').catch(() => {});
     await page.waitForTimeout(300);
   }
+
+  // Last-resort cleanup: sometimes ChatGPT leaves the no-auth modal mounted
+  // even though the authenticated composer is visible underneath. In that
+  // case, the overlay keeps intercepting clicks for image/chat submission.
+  const modalStillVisible = await noAuthModal.isVisible().catch(() => false);
+  if (modalStillVisible) {
+    const removed = await page.evaluate((composerSelector: string) => {
+      const isVisible = (element: Element | null): element is HTMLElement => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+
+      const composerVisible = Array.from(document.querySelectorAll(composerSelector)).some(
+        isVisible,
+      );
+      if (!composerVisible) return false;
+
+      const modal = document.querySelector('#modal-no-auth-login');
+      if (!(modal instanceof HTMLElement)) return false;
+      modal.remove();
+      return true;
+    }, SELECTORS.composer);
+
+    if (removed) {
+      await page.waitForTimeout(150);
+    }
+  }
 }
 
 /**
