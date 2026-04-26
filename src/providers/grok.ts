@@ -94,6 +94,24 @@ async function getVisibleModelPickerState(page: Page): Promise<{ found: boolean;
   );
 }
 
+export function extractGrokFailureText(text: string): string | null {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+
+  if (/\bNo response\.?\b/i.test(normalized)) {
+    const unableMessage = normalized.match(
+      /Grok was unable to finish replying\. Please try again later or use a different model\.?/i,
+    );
+    if (unableMessage) return unableMessage[0];
+
+    if (/^No response\.?$/i.test(normalized)) {
+      return 'Grok returned no response.';
+    }
+  }
+
+  return null;
+}
+
 async function clickVisibleModelOption(page: Page, model: string): Promise<boolean> {
   return page.evaluate(
     ({ modelLabel, optionSelector, scopeSelectors, excludedSelector }) => {
@@ -253,6 +271,12 @@ export const grokActions: ProviderActions = {
     const lastTurn = page.locator(SELECTORS.assistantTurn).last();
     const finalRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
     const markdown = (await lastTurn.innerHTML({ timeout: finalRemainingMs })) ?? '';
+
+    const pageText = await page.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+    const failureText = extractGrokFailureText(`${lastText}\n${pageText}`);
+    if (failureText) {
+      throw new Error(failureText);
+    }
 
     // Extract generated images (Grok/Aurora)
     const images: GeneratedImage[] = await page.evaluate(() => {

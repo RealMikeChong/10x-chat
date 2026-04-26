@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GROK_CONFIG, grokActions } from '../src/providers/grok.js';
+import { extractGrokFailureText, GROK_CONFIG, grokActions } from '../src/providers/grok.js';
 
 describe('Grok Provider', () => {
   describe('GROK_CONFIG', () => {
@@ -27,6 +27,22 @@ describe('Grok Provider', () => {
 
     it('should have a 5-minute default timeout', () => {
       expect(GROK_CONFIG.defaultTimeoutMs).toBe(5 * 60 * 1000);
+    });
+  });
+
+  describe('extractGrokFailureText', () => {
+    it('detects Grok no-response service failures', () => {
+      expect(
+        extractGrokFailureText(
+          'No response. Grok was unable to finish replying. Please try again later or use a different model. Retry Auto',
+        ),
+      ).toBe(
+        'Grok was unable to finish replying. Please try again later or use a different model.',
+      );
+    });
+
+    it('does not flag normal assistant responses', () => {
+      expect(extractGrokFailureText('OK')).toBeNull();
     });
   });
 
