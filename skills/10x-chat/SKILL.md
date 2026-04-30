@@ -41,7 +41,7 @@ Use `npx` (not `bunx` — symlink conflicts in parallel).
 | Provider | Chat | Image | Research | Models | Notes |
 |----------|------|-------|----------|--------|-------|
 | chatgpt | ✅ | ✅ (DALL-E) | ✅ | — | Runs headed by default (anti-bot) |
-| gemini | ✅ | ✅ (Imagen) | ✅ | Fast, **Thinking** (default), Pro | `--model` switches mode |
+| gemini | ✅ | ✅ (Imagen) | ✅ | Fast, **Thinking** (default), Deep Think (Ultra tool), Pro | `--model` switches mode |
 | claude | ✅ | ❌ | ❌ | — | Runs headed by default |
 | grok | ✅ | ❌ | ❌ | UI changes often, use `@latest` |
 | perplexity | ✅ | ❌ | ✅ | Best for research with citations |
@@ -62,6 +62,7 @@ npx 10x-chat@latest login notebooklm
 npx 10x-chat@latest chat -p "Review this code for bugs" --provider chatgpt --file "src/**/*.ts"
 npx 10x-chat@latest chat --provider gemini --file "path/to/prompt.md" -p "Complete this task"
 npx 10x-chat@latest chat --provider gemini --model Pro -p "Solve this math problem"
+npx 10x-chat@latest chat --provider gemini --model "Deep Think" -p "Solve this hard problem"
 
 # Image generation
 npx 10x-chat@latest image -p "A fox astronaut in space" --provider chatgpt
@@ -69,6 +70,7 @@ npx 10x-chat@latest image -p "Watercolor landscape" --provider gemini --save-dir
 
 # Deep research (long-form, 5-10 min)
 npx 10x-chat@latest research -p "Latest breakthroughs in quantum computing" --provider perplexity
+npx 10x-chat@latest research -p "Hard technical research" --provider gemini --model "Deep Think"
 npx 10x-chat@latest research -p "Market analysis of EVs" --provider chatgpt --timeout 600000
 
 # Dry run / clipboard
