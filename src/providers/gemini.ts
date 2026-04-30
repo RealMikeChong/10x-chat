@@ -30,8 +30,8 @@ function geminiModeTestId(model: string): string {
   return `bard-mode-option-${slug}`;
 }
 
-async function clickGeminiModeOption(page: Page, model: string): Promise<boolean> {
-  const target = normalizeGeminiModeLabel(model);
+async function clickGeminiMenuOption(page: Page, label: string): Promise<boolean> {
+  const target = normalizeGeminiModeLabel(label);
   return page.evaluate((targetLabel: string) => {
     const root = document.querySelector('.cdk-overlay-container') ?? document.body;
     const candidates = Array.from(
@@ -52,6 +52,75 @@ async function clickGeminiModeOption(page: Page, model: string): Promise<boolean
     }
     return false;
   }, target);
+}
+
+async function getVisibleGeminiMenuLabels(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const root = document.querySelector('.cdk-overlay-container') ?? document.body;
+    return (
+      Array.from(
+        root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+      ) as HTMLElement[]
+    )
+      .filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0)
+      .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join(', ');
+  });
+}
+
+async function clickGeminiToolsButton(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const candidates = Array.from(
+      document.querySelectorAll('button,[role="button"],material-button'),
+    ) as HTMLElement[];
+    for (const el of candidates) {
+      const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+      if (!visible) continue;
+      const label = [
+        el.textContent ?? '',
+        el.getAttribute('aria-label') ?? '',
+        el.getAttribute('title') ?? '',
+        el.getAttribute('data-test-id') ?? '',
+      ]
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+      if (/\btools?\b/.test(label) || label.includes('工具')) {
+        el.click();
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * Activate a Gemini composer tool such as "Deep Think" or "Deep Research".
+ * Google gates some Ultra features behind the Tools menu instead of the model
+ * picker, so this helper intentionally searches both direct buttons and the
+ * composer Tools popover.
+ */
+export async function activateGeminiTool(page: Page, tool: string): Promise<boolean> {
+  const directClicked = await clickGeminiMenuOption(page, tool);
+  if (directClicked) {
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  const toolsClicked = await clickGeminiToolsButton(page);
+  if (!toolsClicked) return false;
+
+  await page.waitForTimeout(800);
+  const toolClicked = await clickGeminiMenuOption(page, tool);
+  if (toolClicked) {
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  await page.keyboard.press('Escape').catch(() => {});
+  return false;
 }
 
 const SELECTORS = {
@@ -160,7 +229,12 @@ export const geminiActions: ProviderActions = {
     }, SELECTORS.modelPicker);
 
     if (!pickerState.found) {
-      console.warn(`Gemini mode picker not found — skipping model selection for "${model}"`);
+      const toolActivated = await activateGeminiTool(page, model);
+      if (!toolActivated) {
+        console.warn(
+          `Gemini mode picker not found and tool "${model}" was not available — using current mode`,
+        );
+      }
       return;
     }
 
@@ -183,24 +257,18 @@ export const geminiActions: ProviderActions = {
       return false;
     }, testId);
 
-    const textClicked = clicked || (await clickGeminiModeOption(page, model));
+    const textClicked = clicked || (await clickGeminiMenuOption(page, model));
 
     if (!textClicked) {
-      const availableModes = await page.evaluate(() => {
-        const root = document.querySelector('.cdk-overlay-container') ?? document.body;
-        return (
-          Array.from(
-            root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
-          ) as HTMLElement[]
-        )
-          .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
-          .filter(Boolean)
-          .join(', ');
-      });
-      console.warn(
-        `Mode "${model}" not found in Gemini picker${availableModes ? ` (available: ${availableModes})` : ''} — using current mode`,
-      );
-      await page.keyboard.press('Escape');
+      const availableModes = await getVisibleGeminiMenuLabels(page);
+      await page.keyboard.press('Escape').catch(() => {});
+
+      const toolActivated = await activateGeminiTool(page, model);
+      if (!toolActivated) {
+        console.warn(
+          `Mode/tool "${model}" not found in Gemini${availableModes ? ` (mode picker: ${availableModes})` : ''} — using current mode`,
+        );
+      }
       return;
     }
     await page.waitForTimeout(500);

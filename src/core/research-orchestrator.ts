@@ -7,6 +7,7 @@ import { launchBrowser } from '../browser/index.js';
 import { resolveHeadlessMode } from '../browser/mode.js';
 import { waitForUrlPathPrefix } from '../browser/page-utils.js';
 import { loadConfig } from '../config.js';
+import { activateGeminiTool } from '../providers/gemini.js';
 import { getProvider } from '../providers/index.js';
 import { createSession, saveBundle, saveResponse, updateSession } from '../session/index.js';
 import type { ProviderName, ResearchOptions, ResearchResult } from '../types.js';
@@ -43,7 +44,11 @@ const geminiResearch: ResearchProviderConfig = {
     if (visible) {
       await deepResearchBtn.click();
       await page.waitForTimeout(1000);
+      return;
     }
+
+    // Ultra accounts may expose Deep Research from the Gemini Tools menu.
+    await activateGeminiTool(page, 'Deep Research');
     // If not visible, Gemini may auto-route to deep research based on prompt
   },
   progressSelector: '.research-progress, .thinking-indicator, model-response [class*="progress"]',
