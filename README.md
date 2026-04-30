@@ -1,6 +1,6 @@
 # 10x-chat
 
-> Chat with web AI agents (ChatGPT, Gemini, Claude, Grok, Perplexity, NotebookLM) from your terminal via browser automation.
+> Chat with web AI agents (ChatGPT, Gemini, Claude, Grok, Perplexity) from your terminal via browser automation.
 
 **English** | [繁體中文](./README-zh.md)
 
@@ -110,9 +110,26 @@ npx 10x-chat@latest research -p "Compare React vs Vue in 2026" --provider perple
 | `--poll-interval <ms>` | Progress check interval (default: 5000) |
 | `--save-dir <dir>` | Directory to save the research report |
 
+### `history`
+
+List chat history visible in provider sidebars (ChatGPT, Gemini, Claude, Grok, Perplexity).
+
+```bash
+npx 10x-chat@latest history --provider gemini
+npx 10x-chat@latest history --provider all --limit 10
+npx 10x-chat@latest history --provider chatgpt --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--provider <name>` | Provider: `chatgpt`, `gemini`, `claude`, `grok`, `perplexity`, or `all` (default: all) |
+| `--limit <n>` | Maximum items per provider (default: 20) |
+| `--headed` | Show browser window |
+| `--json` | Output JSON |
+
 ### `status`
 
-List recent chat sessions.
+List local 10x-chat CLI sessions.
 
 ```bash
 npx 10x-chat@latest status              # Last 24 hours

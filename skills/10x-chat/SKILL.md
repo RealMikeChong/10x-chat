@@ -77,7 +77,9 @@ npx 10x-chat@latest research -p "Market analysis of EVs" --provider chatgpt --ti
 npx 10x-chat@latest chat --dry-run -p "Debug this error" --file src/
 npx 10x-chat@latest chat --copy -p "Explain this" --file "src/**"
 
-# Session management
+# Provider chat history + local session management
+npx 10x-chat@latest history --provider gemini
+npx 10x-chat@latest history --provider all --limit 10
 npx 10x-chat@latest status
 npx 10x-chat@latest session <id> --render
 

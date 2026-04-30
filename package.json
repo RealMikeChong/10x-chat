@@ -1,6 +1,6 @@
 {
   "name": "10x-chat",
-  "version": "0.10.11",
+  "version": "0.10.12",
   "description": "CLI to chat with web AI agents (ChatGPT, Gemini, Claude) via browser automation",
   "type": "module",
   "main": "dist/index.js",
