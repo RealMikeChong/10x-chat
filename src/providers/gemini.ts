@@ -33,9 +33,13 @@ function geminiModeTestId(model: string): string {
 async function clickGeminiMenuOption(page: Page, label: string): Promise<boolean> {
   const target = normalizeGeminiModeLabel(label);
   return page.evaluate((targetLabel: string) => {
-    const root = document.querySelector('.cdk-overlay-container') ?? document.body;
+    const overlay = document.querySelector('.cdk-overlay-container');
+    const overlayHasVisibleContent = !!Array.from(
+      overlay?.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option') ?? [],
+    ).some((el) => el instanceof HTMLElement && el.offsetWidth > 0 && el.offsetHeight > 0);
+    if (!overlay || !overlayHasVisibleContent) return false;
     const candidates = Array.from(
-      root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+      overlay.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
     ) as HTMLElement[];
     for (const el of candidates) {
       const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -112,7 +116,7 @@ export async function activateGeminiTool(page: Page, tool: string): Promise<bool
   const toolsClicked = await clickGeminiToolsButton(page);
   if (!toolsClicked) return false;
 
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(1500);
   const toolClicked = await clickGeminiMenuOption(page, tool);
   if (toolClicked) {
     await page.waitForTimeout(500);
@@ -128,7 +132,7 @@ const SELECTORS = {
   sendButton: 'button.send-button, button[aria-label="Send message"]',
   /** Model/mode picker button near the composer (Gemini calls it "mode picker") */
   modelPicker:
-    'button[data-test-id="bard-mode-menu-button"], button[aria-label="Open mode picker"]',
+    'button[data-test-id="bard-mode-menu-button"], button[aria-label="Open mode picker"], button.input-area-switch, button.mat-mdc-menu-trigger:has(.input-area-switch-button-label)',
   /** model-response is the Angular custom element wrapping each AI turn */
   responseTurn: 'model-response .model-response-text, model-response message-content',
   /** Indicators that Gemini is still generating (text streaming or image generation in flight) */
@@ -287,17 +291,33 @@ export const geminiActions: ProviderActions = {
         .isVisible()
         .catch(() => false);
       if (!composerVisible) return false;
-      // Guest users see the composer but can't use authenticated features.
-      // Require that no sign-in button is visible.
-      const signInVisible = await page.evaluate(() => {
+
+      const authState = await page.evaluate(() => {
+        const visible = (el: Element): boolean => {
+          if (!(el instanceof HTMLElement)) return false;
+          return el.offsetWidth > 0 && el.offsetHeight > 0;
+        };
+
+        // Gemini signed-in accounts show an account/profile button and paid-plan badges
+        // (e.g. ULTRA). Prefer positive signed-in evidence over generic Sign in text,
+        // because the signed-in UI can still contain "Sign in" links in footer/help areas.
+        const signedInIndicators = Array.from(
+          document.querySelectorAll(
+            'button[aria-label*="profile" i], button[aria-label*="account" i], [data-test-id*="account" i], [data-test-id*="profile" i], img[alt*="profile" i], img[alt*="account" i]',
+          ),
+        ).filter(visible);
+        const bodyText = document.body.textContent ?? '';
+        const hasPaidBadge = /\b(ultra|pro)\b/i.test(bodyText);
+        if (signedInIndicators.length > 0 || hasPaidBadge) {
+          return { signedIn: true, signInVisible: false };
+        }
+
         const candidates = Array.from(
           document.querySelectorAll(
             '.sign-in-button, button[data-test-id="bard-sign-in-button"], a[href*="accounts.google.com"], button',
           ),
-        ) as HTMLElement[];
-        return candidates.some((el) => {
-          const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
-          if (!visible) return false;
+        ).filter(visible) as HTMLElement[];
+        const signInVisible = candidates.some((el) => {
           const text = (el.textContent ?? '').trim();
           const testId = el.getAttribute('data-test-id') ?? '';
           const href = el instanceof HTMLAnchorElement ? el.href : '';
@@ -307,8 +327,11 @@ export const geminiActions: ProviderActions = {
             href.includes('accounts.google.com')
           );
         });
+        return { signedIn: false, signInVisible };
       });
-      if (signInVisible) return false;
+
+      if (authState.signedIn) return true;
+      if (authState.signInVisible) return false;
       return true;
     } catch {
       return false;
@@ -384,6 +407,10 @@ export const geminiActions: ProviderActions = {
   },
 
   async submitPrompt(page: Page, prompt: string): Promise<void> {
+    // Gemini mode/tool menus sometimes leave a transparent CDK backdrop open.
+    // Dismiss it before focusing the composer, otherwise Playwright click is intercepted.
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(300);
     await submitPromptToComposer(page, prompt, {
       composerSelector: SELECTORS.composer,
       sendButtonSelector: SELECTORS.sendButton,
