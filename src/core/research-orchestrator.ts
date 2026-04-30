@@ -89,18 +89,36 @@ const geminiResearch: ResearchProviderConfig = {
 
 const chatgptResearch: ResearchProviderConfig = {
   async activateResearch(page: Page) {
-    // ChatGPT deep research: click the sidebar link to navigate to /deep-research
-    // This puts the composer into deep research mode with a "Deep research" chip.
+    // ChatGPT deep research: prefer the sidebar entry, but the current UI may expose
+    // research only through the /deep-research route/composer footer.
     const sidebarLink = page.locator('[data-testid="deep-research-sidebar-item"]').first();
     if (await sidebarLink.isVisible().catch(() => false)) {
       await sidebarLink.click();
       await page.waitForTimeout(3000);
+    } else if (!page.url().includes('/deep-research')) {
+      await page.goto('https://chatgpt.com/deep-research', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(3000);
     }
-    // Verify deep research mode is active (chip in composer footer)
-    const chip = page.locator('[aria-label*="Deep research"]').first();
-    if (await chip.isVisible().catch(() => false)) {
-      console.log('  Deep research mode active');
+
+    // Verify deep research mode is active (chip in composer footer). The chip is
+    // often rendered as plain text inside composer-footer-actions, not an aria label.
+    const active = await page
+      .locator(
+        '[aria-label*="Deep research"], [data-testid="composer-footer-actions"]:has-text("Deep research")',
+      )
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (!active) {
+      const url = page.url();
+      const bodyPreview = await page.evaluate(
+        () => document.body.textContent?.replace(/\s+/g, ' ').slice(0, 300) ?? '',
+      );
+      throw new Error(
+        `ChatGPT Deep Research mode was not detected after activation (url: ${url}). ${bodyPreview}`,
+      );
     }
+    console.log('  Deep research mode active');
   },
   progressSelector: '[data-message-author-role="assistant"]',
   async getProgress(page: Page) {
@@ -262,11 +280,12 @@ export async function runResearch(options: ResearchOptions): Promise<ResearchRes
   const profileMode = options.isolatedProfile ? 'isolated' : config.profileMode;
 
   // Create session
-  const session = await createSession(providerName, options.prompt);
+  const session = await createSession(providerName, options.prompt, options.model);
   await saveBundle(session.id, options.prompt);
 
   console.log(chalk.dim(`Session: ${session.id}`));
   console.log(chalk.blue(`Provider: ${provider.config.displayName}`));
+  if (options.model) console.log(chalk.dim(`Model: ${options.model}`));
   console.log(chalk.dim(`Timeout: ${Math.round(timeoutMs / 1000)}s`));
   console.log(chalk.dim(`Poll interval: ${Math.round(pollIntervalMs / 1000)}s\n`));
 
@@ -293,6 +312,11 @@ export async function runResearch(options: ResearchOptions): Promise<ResearchRes
       throw new Error(
         `Not logged in to ${provider.config.displayName}. Run: 10x-chat login ${providerName}`,
       );
+    }
+
+    if (options.model && provider.actions.selectModel) {
+      console.log(chalk.dim(`Selecting model: ${options.model}`));
+      await provider.actions.selectModel(browser.page, options.model);
     }
 
     // Step 1: Activate deep research mode

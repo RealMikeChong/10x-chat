@@ -154,6 +154,8 @@ export interface ResearchOptions {
   headed?: boolean;
   timeoutMs?: number;
   pollIntervalMs?: number;
+  /** Optional model/mode to select before activating research (e.g. Gemini Deep Think). */
+  model?: string;
   saveDir?: string;
   isolatedProfile?: boolean;
 }

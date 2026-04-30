@@ -13,10 +13,46 @@ export const GEMINI_CONFIG: ProviderConfig = {
   displayName: 'Gemini',
   url: 'https://gemini.google.com/app',
   loginUrl: 'https://gemini.google.com/app',
-  models: ['Fast', 'Thinking', 'Pro'],
+  models: ['Fast', 'Thinking', 'Deep Think', 'Pro'],
   defaultModel: 'Thinking',
   defaultTimeoutMs: 5 * 60 * 1000,
 };
+
+function normalizeGeminiModeLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function geminiModeTestId(model: string): string {
+  const slug = normalizeGeminiModeLabel(model).replace(/\s+/g, '-');
+  return `bard-mode-option-${slug}`;
+}
+
+async function clickGeminiModeOption(page: Page, model: string): Promise<boolean> {
+  const target = normalizeGeminiModeLabel(model);
+  return page.evaluate((targetLabel: string) => {
+    const root = document.querySelector('.cdk-overlay-container') ?? document.body;
+    const candidates = Array.from(
+      root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+    ) as HTMLElement[];
+    for (const el of candidates) {
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const aria = (el.getAttribute('aria-label') ?? '').toLowerCase();
+      const label = `${text} ${aria}`.replace(/[^a-z0-9]+/g, ' ').trim();
+      if (
+        label === targetLabel ||
+        label.startsWith(`${targetLabel} `) ||
+        label.includes(targetLabel)
+      ) {
+        el.click();
+        return true;
+      }
+    }
+    return false;
+  }, target);
+}
 
 const SELECTORS = {
   composer: '.ql-editor[contenteditable="true"], div[role="textbox"][aria-label*="prompt"]',
@@ -128,7 +164,7 @@ export const geminiActions: ProviderActions = {
       return;
     }
 
-    if (pickerState.text.toLowerCase() === model.toLowerCase()) {
+    if (normalizeGeminiModeLabel(pickerState.text) === normalizeGeminiModeLabel(model)) {
       return; // Already on the requested mode
     }
 
@@ -137,7 +173,7 @@ export const geminiActions: ProviderActions = {
     await page.waitForTimeout(1000);
 
     // Select by data-test-id (e.g. "Thinking" → "bard-mode-option-thinking")
-    const testId = `bard-mode-option-${model.toLowerCase()}`;
+    const testId = geminiModeTestId(model);
     const clicked = await page.evaluate((tid: string) => {
       const btn = document.querySelector(`button[data-test-id="${tid}"]`);
       if (btn instanceof HTMLElement && btn.offsetWidth > 0) {
@@ -147,8 +183,23 @@ export const geminiActions: ProviderActions = {
       return false;
     }, testId);
 
-    if (!clicked) {
-      console.warn(`Mode "${model}" not found in Gemini picker — using current mode`);
+    const textClicked = clicked || (await clickGeminiModeOption(page, model));
+
+    if (!textClicked) {
+      const availableModes = await page.evaluate(() => {
+        const root = document.querySelector('.cdk-overlay-container') ?? document.body;
+        return (
+          Array.from(
+            root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+          ) as HTMLElement[]
+        )
+          .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+          .filter(Boolean)
+          .join(', ');
+      });
+      console.warn(
+        `Mode "${model}" not found in Gemini picker${availableModes ? ` (available: ${availableModes})` : ''} — using current mode`,
+      );
       await page.keyboard.press('Escape');
       return;
     }
@@ -170,11 +221,25 @@ export const geminiActions: ProviderActions = {
       if (!composerVisible) return false;
       // Guest users see the composer but can't use authenticated features.
       // Require that no sign-in button is visible.
-      const signInVisible = await page
-        .locator('.sign-in-button, a[href*="accounts.google.com"][class*=sign]')
-        .first()
-        .isVisible()
-        .catch(() => false);
+      const signInVisible = await page.evaluate(() => {
+        const candidates = Array.from(
+          document.querySelectorAll(
+            '.sign-in-button, button[data-test-id="bard-sign-in-button"], a[href*="accounts.google.com"], button',
+          ),
+        ) as HTMLElement[];
+        return candidates.some((el) => {
+          const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+          if (!visible) return false;
+          const text = (el.textContent ?? '').trim();
+          const testId = el.getAttribute('data-test-id') ?? '';
+          const href = el instanceof HTMLAnchorElement ? el.href : '';
+          return (
+            /sign in/i.test(text) ||
+            testId === 'bard-sign-in-button' ||
+            href.includes('accounts.google.com')
+          );
+        });
+      });
       if (signInVisible) return false;
       return true;
     } catch {

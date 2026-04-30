@@ -13,6 +13,7 @@ export function createResearchCommand(): Command {
     )
     .requiredOption('-p, --prompt <text>', 'The research query')
     .option('--provider <name>', `Provider (${RESEARCH_PROVIDERS.join(', ')})`, 'gemini')
+    .option('--model <name>', 'Model/mode to select before starting research')
     .option('--headed', 'Show browser window')
     .option('--timeout <ms>', 'Total timeout in milliseconds', '600000')
     .option('--poll-interval <ms>', 'Progress check interval in milliseconds', '5000')
@@ -52,6 +53,7 @@ export function createResearchCommand(): Command {
           headed: options.headed,
           timeoutMs,
           pollIntervalMs,
+          model: options.model,
           saveDir: options.saveDir,
           isolatedProfile: options.isolatedProfile,
         });

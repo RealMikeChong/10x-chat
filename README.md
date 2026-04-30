@@ -64,7 +64,7 @@ npx 10x-chat@latest chat -p "Long task" --timeout 600000 --headed  # 10min timeo
 |------|-------------|
 | `-p, --prompt <text>` | **(required)** The prompt to send |
 | `--provider <name>` | Provider: `chatgpt`, `gemini`, `claude`, `grok`, `perplexity`, `notebooklm` (default: config) |
-| `--model <name>` | Model/mode to select in the provider UI (e.g. Gemini: `Fast`, `Thinking`, `Pro`) |
+| `--model <name>` | Model/mode to select in the provider UI (e.g. Gemini: `Fast`, `Thinking`, `Deep Think`, `Pro`) |
 | `-f, --file <paths...>` | Files/globs to bundle as context |
 | `--copy` | Copy bundle to clipboard instead of sending |
 | `--dry-run` | Preview the bundle without sending |
@@ -95,6 +95,7 @@ Deep research via ChatGPT, Gemini, or Perplexity with non-blocking progress poll
 
 ```bash
 npx 10x-chat@latest research -p "Latest breakthroughs in quantum computing" --provider gemini
+npx 10x-chat@latest research -p "Hard technical research" --provider gemini --model "Deep Think"
 npx 10x-chat@latest research -p "Market analysis of EVs" --provider chatgpt --timeout 600000
 npx 10x-chat@latest research -p "Compare React vs Vue in 2026" --provider perplexity --save-dir ./reports
 ```
@@ -103,6 +104,7 @@ npx 10x-chat@latest research -p "Compare React vs Vue in 2026" --provider perple
 |------|-------------|
 | `-p, --prompt <text>` | **(required)** The research query |
 | `--provider <name>` | Provider: `chatgpt`, `gemini`, `perplexity` (default: gemini) |
+| `--model <name>` | Optional model/mode to select before starting research |
 | `--headed` | Show browser window |
 | `--timeout <ms>` | Total timeout (default: 600000 / 10 min) |
 | `--poll-interval <ms>` | Progress check interval (default: 5000) |
@@ -207,7 +209,7 @@ This lets agents like Codex or Claude Code use 10x-chat to query other models fo
 | Provider | Status | Models | URL |
 |----------|--------|--------|-----|
 | ChatGPT | ✅ | — | chatgpt.com |
-| Gemini | ✅ | Fast, **Thinking** (default), Pro | gemini.google.com |
+| Gemini | ✅ | Fast, **Thinking** (default), Deep Think, Pro | gemini.google.com |
 | Claude | ✅ | — | claude.ai |
 | Grok | ✅ | — | grok.com |
 | Perplexity | ✅ | — | perplexity.ai |
