@@ -34,21 +34,23 @@ async function clickGeminiMenuOption(page: Page, label: string): Promise<boolean
   const target = normalizeGeminiModeLabel(label);
   return page.evaluate((targetLabel: string) => {
     const overlay = document.querySelector('.cdk-overlay-container');
-    const overlayHasVisibleContent = !!Array.from(
-      overlay?.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option') ?? [],
-    ).some((el) => el instanceof HTMLElement && el.offsetWidth > 0 && el.offsetHeight > 0);
-    if (!overlay || !overlayHasVisibleContent) return false;
+    if (!overlay) return false;
+
     const candidates = Array.from(
-      overlay.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+      overlay.querySelectorAll(
+        'button,[role="menuitem"],[role="menuitemcheckbox"],[role="option"],mat-option',
+      ),
     ) as HTMLElement[];
     for (const el of candidates) {
+      const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
+      if (!visible) continue;
       const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
       const aria = (el.getAttribute('aria-label') ?? '').toLowerCase();
-      const label = `${text} ${aria}`.replace(/[^a-z0-9]+/g, ' ').trim();
+      const normalized = `${text} ${aria}`.replace(/[^a-z0-9]+/g, ' ').trim();
       if (
-        label === targetLabel ||
-        label.startsWith(`${targetLabel} `) ||
-        label.includes(targetLabel)
+        normalized === targetLabel ||
+        normalized.startsWith(`${targetLabel} `) ||
+        normalized.includes(targetLabel)
       ) {
         el.click();
         return true;
@@ -63,7 +65,9 @@ async function getVisibleGeminiMenuLabels(page: Page): Promise<string> {
     const root = document.querySelector('.cdk-overlay-container') ?? document.body;
     return (
       Array.from(
-        root.querySelectorAll('button,[role="menuitem"],[role="option"],mat-option'),
+        root.querySelectorAll(
+          'button,[role="menuitem"],[role="menuitemcheckbox"],[role="option"],mat-option',
+        ),
       ) as HTMLElement[]
     )
       .filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0)
@@ -78,23 +82,26 @@ async function clickGeminiToolsButton(page: Page): Promise<boolean> {
     const candidates = Array.from(
       document.querySelectorAll('button,[role="button"],material-button'),
     ) as HTMLElement[];
-    for (const el of candidates) {
+    const visibleTools = candidates.filter((el) => {
       const visible = el.offsetWidth > 0 && el.offsetHeight > 0;
-      if (!visible) continue;
-      const label = [
-        el.textContent ?? '',
-        el.getAttribute('aria-label') ?? '',
-        el.getAttribute('title') ?? '',
-        el.getAttribute('data-test-id') ?? '',
-      ]
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-      if (/\btools?\b/.test(label) || label.includes('工具')) {
-        el.click();
-        return true;
-      }
+      if (!visible) return false;
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const aria = (el.getAttribute('aria-label') ?? '').toLowerCase();
+      const title = (el.getAttribute('title') ?? '').toLowerCase();
+      const testId = (el.getAttribute('data-test-id') ?? '').toLowerCase();
+      return (
+        text === 'tools' ||
+        text === '工具' ||
+        /\btools?\b/.test(aria) ||
+        /\btools?\b/.test(title) ||
+        testId.includes('toolbox')
+      );
+    });
+
+    const el = visibleTools.at(-1);
+    if (el instanceof HTMLElement) {
+      el.click();
+      return true;
     }
     return false;
   });
@@ -162,6 +169,49 @@ const SELECTORS = {
  * After text stabilizes, check if image generation is in progress and
  * wait for images to appear and fully load (naturalWidth > 0).
  */
+function isGeminiDeferredResponse(text: string): boolean {
+  return /(?:deep think|正在处理|正在生成|稍后回来|check back|come back|generating your response)/i.test(
+    text,
+  );
+}
+
+async function waitForDeepThinkFinalResponse(
+  page: Page,
+  initialText: string,
+  timeoutMs: number,
+  onChunk?: (chunk: string) => void,
+): Promise<{ text: string; truncated: boolean }> {
+  if (!isGeminiDeferredResponse(initialText)) {
+    return { text: initialText, truncated: false };
+  }
+
+  const startTime = Date.now();
+  let lastText = initialText;
+  while (Date.now() - startTime < timeoutMs) {
+    await page.waitForTimeout(15_000);
+    await page.goto(page.url(), { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForTimeout(3_000);
+
+    const currentText =
+      (
+        await page
+          .locator(SELECTORS.responseTurn)
+          .last()
+          .textContent()
+          .catch(() => '')
+      )?.trim() ?? '';
+    if (currentText && currentText !== lastText) {
+      lastText = currentText;
+      onChunk?.(currentText);
+    }
+    if (currentText && !isGeminiDeferredResponse(currentText)) {
+      return { text: currentText, truncated: false };
+    }
+  }
+
+  return { text: lastText, truncated: true };
+}
+
 async function waitForImages(page: Page, timeoutMs: number): Promise<void> {
   const startTime = Date.now();
   const pollInterval = 2_000;
@@ -225,6 +275,21 @@ async function waitForImages(page: Page, timeoutMs: number): Promise<void> {
 
 export const geminiActions: ProviderActions = {
   async selectModel(page: Page, model: string): Promise<void> {
+    // Gemini Ultra exposes Deep Think as a Tools menu checkbox, not as a normal mode.
+    if (normalizeGeminiModeLabel(model) === 'deep think') {
+      await page
+        .locator(SELECTORS.composer)
+        .first()
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .catch(() => {});
+      await page.waitForTimeout(1_500);
+      const toolActivated = await activateGeminiTool(page, model);
+      if (!toolActivated) {
+        console.warn(`Gemini tool "${model}" was not available — using current mode`);
+      }
+      return;
+    }
+
     // Check current mode via page.evaluate (avoids locator.textContent timeout)
     const pickerState = await page.evaluate((sel: string) => {
       const btn = document.querySelector(sel);
@@ -266,6 +331,7 @@ export const geminiActions: ProviderActions = {
     if (!textClicked) {
       const availableModes = await getVisibleGeminiMenuLabels(page);
       await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(700);
 
       const toolActivated = await activateGeminiTool(page, model);
       if (!toolActivated) {
@@ -429,7 +495,7 @@ export const geminiActions: ProviderActions = {
     await page.locator(SELECTORS.responseTurn).nth(existingTurns).waitFor({ timeout: timeoutMs });
 
     const remainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
-    const {
+    let {
       text,
       elapsed: _pollElapsed,
       truncated,
@@ -463,6 +529,16 @@ export const geminiActions: ProviderActions = {
         return false;
       },
     });
+
+    const deepThinkRemainingMs = Math.max(timeoutMs - (Date.now() - startTime), 5_000);
+    const deepThinkFinal = await waitForDeepThinkFinalResponse(
+      page,
+      text,
+      deepThinkRemainingMs,
+      onChunk,
+    );
+    text = deepThinkFinal.text;
+    truncated = truncated || deepThinkFinal.truncated;
 
     // Post-poll: wait for images to finish loading if image generation was triggered.
     // Gemini image gen can take 10-30s after the text portion stabilizes.
